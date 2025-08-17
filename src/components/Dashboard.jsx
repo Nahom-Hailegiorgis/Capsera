@@ -1,656 +1,668 @@
-import React, { useState, useEffect, useCallback } from 'react'
-import { fetchIdeas, fetchMySubmissions, submitIdea, submitFeedback } from '../lib/supabase'
+import React, { useState, useEffect, useRef } from 'react'
+import { supabase, getDeviceId, canSubmit, getRemainingWaitTime, setLastSubmissionTime, saveDraft, getDraft, clearDraft } from '../lib/supabase'
 import { evaluateIdea, evaluateFeedback } from '../lib/openai'
+import { SUPPORTED_LANGUAGES, getCurrentLanguage, setCurrentLanguage, translateText, getUIText } from '../lib/translate'
 
-const CATEGORIES = [
-  'Technology', 'Healthcare', 'Education', 'Environment', 'Finance',
-  'Social Impact', 'Entertainment', 'Food & Beverage', 'Transportation', 'Other'
-]
-
-const HEAR_ABOUT_OPTIONS = [
-  'Social Media', 'Friend/Family', 'Online Search', 'News Article', 
-  'Podcast', 'Conference/Event', 'Advertisement', 'Other'
-]
-
-const REFRESH_INTERVAL = 30000 // 30 seconds
-
-function Dashboard() {
+const Dashboard = () => {
   const [ideas, setIdeas] = useState([])
   const [mySubmissions, setMySubmissions] = useState([])
   const [selectedIdea, setSelectedIdea] = useState(null)
-  const [refreshTimer, setRefreshTimer] = useState(REFRESH_INTERVAL / 1000)
-  
-  // Form states
+  const [refreshTimer, setRefreshTimer] = useState(30)
+  const [isLoading, setIsLoading] = useState(false)
+  const [currentLanguage, setCurrentLang] = useState('en')
+  const [error, setError] = useState('')
+  const [success, setSuccess] = useState('')
+
+  // Form state
   const [formData, setFormData] = useState({
-    full_name: '',
-    who_to_serve: '',
-    product_idea: '',
+    fullName: '',
+    whoToServe: '',
+    productIdea: '',
     categories: [],
     source: '',
-    other_source: ''
+    otherSource: '',
+    userPainPoints: '',
+    existingAlternatives: '',
+    userCapabilities: ''
   })
-  
+
+  // Feedback form state
   const [feedbackData, setFeedbackData] = useState({
-    feedback_text: '',
-    contact_info: ''
+    feedbackText: '',
+    contactInfo: ''
   })
-  
-  const [messages, setMessages] = useState({ idea: '', feedback: '' })
-  const [loading, setLoading] = useState({ idea: false, feedback: false })
-  const [lastSubmissionTime, setLastSubmissionTime] = useState(0)
 
-  // Load saved form data from localStorage
+  const [rateLimitTime, setRateLimitTime] = useState(0)
+  const intervalRef = useRef()
+  const rateLimitIntervalRef = useRef()
+
+  // Categories list
+  const CATEGORIES = [
+    'technology', 'healthcare', 'education', 'finance', 'environment', 
+    'social', 'entertainment', 'transportation', 'food', 'other'
+  ]
+
+  // Sources list
+  const SOURCES = [
+    'social_media', 'search_engine', 'friend_referral', 'advertisement', 'other'
+  ]
+
+  // Load draft on component mount
   useEffect(() => {
-    const saved = localStorage.getItem('antithesis_form_data')
-    if (saved) {
-      try {
-        setFormData(JSON.parse(saved))
-      } catch (e) {
-        console.error('Failed to load saved form data:', e)
-      }
+    const draft = getDraft()
+    if (draft) {
+      setFormData(draft)
     }
-    
-    const savedFeedback = localStorage.getItem('antithesis_feedback_data')
-    if (savedFeedback) {
-      try {
-        setFeedbackData(JSON.parse(savedFeedback))
-      } catch (e) {
-        console.error('Failed to load saved feedback data:', e)
-      }
-    }
-    
-    const lastSubmit = localStorage.getItem('last_submission_time')
-    if (lastSubmit) {
-      setLastSubmissionTime(parseInt(lastSubmit))
-    }
-  }, [])
+    loadIdeas()
+    loadMySubmissions()
+    updateRateLimit()
 
-  // Save form data to localStorage
-  useEffect(() => {
-    localStorage.setItem('antithesis_form_data', JSON.stringify(formData))
-  }, [formData])
-
-  useEffect(() => {
-    localStorage.setItem('antithesis_feedback_data', JSON.stringify(feedbackData))
-  }, [feedbackData])
-
-  // Load data on mount and set up refresh timer
-  useEffect(() => {
-    loadData()
-    
-    const interval = setInterval(() => {
+    // Set up auto-refresh
+    intervalRef.current = setInterval(() => {
       setRefreshTimer(prev => {
         if (prev <= 1) {
-          loadData()
-          return REFRESH_INTERVAL / 1000
+          loadIdeas()
+          loadMySubmissions()
+          return 30
         }
         return prev - 1
       })
     }, 1000)
-    
-    return () => clearInterval(interval)
-  }, [])
 
-  const loadData = useCallback(async () => {
-    try {
-      const [ideasData, submissionsData] = await Promise.all([
-        fetchIdeas(),
-        fetchMySubmissions()
-      ])
-      setIdeas(ideasData)
-      setMySubmissions(submissionsData)
-    } catch (error) {
-      console.error('Failed to load data:', error)
+    return () => {
+      if (intervalRef.current) clearInterval(intervalRef.current)
+      if (rateLimitIntervalRef.current) clearInterval(rateLimitIntervalRef.current)
     }
   }, [])
 
-  const showMessage = (type, message, duration = 5000) => {
-    setMessages(prev => ({ ...prev, [type]: message }))
-    setTimeout(() => {
-      setMessages(prev => ({ ...prev, [type]: '' }))
-    }, duration)
+  // Save draft whenever form data changes
+  useEffect(() => {
+    if (formData.fullName || formData.whoToServe || formData.productIdea) {
+      saveDraft(formData)
+    }
+  }, [formData])
+
+  const updateRateLimit = () => {
+    const remaining = getRemainingWaitTime()
+    setRateLimitTime(remaining)
+    
+    if (remaining > 0) {
+      rateLimitIntervalRef.current = setInterval(() => {
+        const newRemaining = getRemainingWaitTime()
+        setRateLimitTime(newRemaining)
+        if (newRemaining <= 0) {
+          clearInterval(rateLimitIntervalRef.current)
+        }
+      }, 1000)
+    }
   }
 
-  const handleFormChange = (field, value) => {
-    if (field === 'categories') {
-      const newCategories = formData.categories.includes(value)
-        ? formData.categories.filter(cat => cat !== value)
-        : [...formData.categories, value]
-      setFormData(prev => ({ ...prev, categories: newCategories }))
-    } else {
-      setFormData(prev => ({ ...prev, [field]: value }))
+  const loadIdeas = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('ideas')
+        .select('*')
+        .order('timestamp', { ascending: false })
+      
+      if (error) {
+        console.error('Error loading ideas:', error)
+        if (error.code === '42501') {
+          console.error('Permission Denied (RLS)')
+          setError('Permission Denied (RLS)')
+        } else {
+          console.error(`System Error: ${error.message}`)
+          setError(`System Error: ${error.message}`)
+        }
+      } else {
+        setIdeas(data || [])
+      }
+    } catch (err) {
+      console.error('System Error:', err.message)
+      setError(`System Error: ${err.message}`)
     }
+  }
+
+  const loadMySubmissions = async () => {
+    try {
+      const deviceId = getDeviceId()
+      const { data, error } = await supabase
+        .from('ideas')
+        .select('*')
+        .eq('device_id', deviceId)
+        .order('timestamp', { ascending: false })
+      
+      if (error) {
+        console.error('Error loading submissions:', error)
+      } else {
+        setMySubmissions(data || [])
+      }
+    } catch (err) {
+      console.error('Error loading submissions:', err)
+    }
+  }
+
+  const checkForDuplicates = async (productIdea) => {
+    try {
+      const { data, error } = await supabase
+        .from('ideas')
+        .select('product_idea')
+        .ilike('product_idea', `%${productIdea.toLowerCase()}%`)
+      
+      return data && data.length > 0
+    } catch (err) {
+      console.warn('Error checking duplicates:', err)
+      return false
+    }
+  }
+
+  const handleInputChange = (field, value) => {
+    setFormData(prev => ({ ...prev, [field]: value }))
+    setError('')
+  }
+
+  const handleCategoryToggle = (category) => {
+    setFormData(prev => ({
+      ...prev,
+      categories: prev.categories.includes(category)
+        ? prev.categories.filter(c => c !== category)
+        : [...prev.categories, category]
+    }))
   }
 
   const getWordCount = (text) => {
-    return text.trim().split(/\s+/).filter(word => word.length > 0).length
+    return text.trim() ? text.trim().split(/\s+/).length : 0
   }
 
-  const canSubmitIdea = () => {
-    const now = Date.now()
-    const timeSinceLastSubmission = now - lastSubmissionTime
-    return timeSinceLastSubmission >= 60000 // 1 minute
+  const validateForm = () => {
+    if (!formData.fullName.trim()) return 'Full name is required'
+    if (!formData.whoToServe.trim()) return 'Who you serve is required'
+    if (!formData.productIdea.trim()) return 'Product idea is required'
+    if (getWordCount(formData.whoToServe) > 50) return 'Who you serve must be 50 words or less'
+    if (getWordCount(formData.productIdea) > 150) return 'Product idea must be 150 words or less'
+    if (!canSubmit()) return 'Please wait before submitting again'
+    return null
   }
 
-  const handleIdeaSubmit = async (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault()
     
-    if (!canSubmitIdea()) {
-      const remaining = Math.ceil((60000 - (Date.now() - lastSubmissionTime)) / 1000)
-      showMessage('idea', `Please wait ${remaining} seconds before submitting again`, 3000)
-      return
-    }
-    
-    // Check minimum word counts
-    const whoToServeWords = getWordCount(formData.who_to_serve)
-    const productIdeaWords = getWordCount(formData.product_idea)
-    
-    if (whoToServeWords < 10) {
-      showMessage('idea', 'Who You Serve must be at least 10 words', 3000)
-      return
-    }
-    
-    if (productIdeaWords < 25) {
-      showMessage('idea', 'Product Idea must be at least 25 words', 3000)
-      return
-    }
-    
-    if (getWordCount(formData.who_to_serve) > 50) {
-      showMessage('idea', 'Who You Serve must be 50 words or less', 3000)
-      return
-    }
-    
-    if (getWordCount(formData.product_idea) > 150) {
-      showMessage('idea', 'Product Idea must be 150 words or less', 3000)
+    const validationError = validateForm()
+    if (validationError) {
+      setError(validationError)
       return
     }
 
-    setLoading(prev => ({ ...prev, idea: true }))
-    
+    setIsLoading(true)
+    setError('')
+    setSuccess('')
+
     try {
-      // Step 1: Check for local duplicates against My Submissions
-      console.log('Step 1: Checking for local duplicates against My Submissions...')
-      const newProductIdea = formData.product_idea.toLowerCase().trim()
+      // Check for duplicates
+      const isDuplicate = await checkForDuplicates(formData.productIdea)
       
-      for (const submission of mySubmissions) {
-        const existingIdea = submission.product_idea.toLowerCase().trim()
-        if (newProductIdea === existingIdea) {
-          console.log('Local Duplicate Detection: Exact match found in My Submissions')
-          showMessage('idea', 'You have already submitted this exact idea. Please submit something new.', 5000)
-          setLoading(prev => ({ ...prev, idea: false }))
-          return
-        }
-      }
-
-      // Step 2: OpenAI content validation
-      console.log('Step 2: Starting OpenAI content validation...')
-      const evaluation = await evaluateIdea(
-        formData.product_idea,
-        formData.full_name,
-        formData.who_to_serve
-      )
-
+      // Prepare submission data
       const submissionData = {
-        full_name: formData.full_name,
-        who_to_serve: formData.who_to_serve,
-        product_idea: formData.product_idea,
-        categories: formData.categories,
-        source: formData.source === 'Other' ? formData.other_source : formData.source,
-        visible: evaluation.visible,
-        rejection_reason: evaluation.rejection_reason,
-        rough_score: evaluation.rough_score
+        ...formData,
+        source: formData.source === 'other' ? formData.otherSource : formData.source,
+        device_id: getDeviceId()
       }
 
-      if (!evaluation.approved) {
-        const reason = evaluation.rejection_reason.toLowerCase()
-        let ruleTriggered = 'Unknown rule'
-        let errorMessage = 'Submission rejected: '
-        
-        // Log which specific rule was triggered
-        if (reason.includes('spam') || reason.includes('junk') || reason.includes('random') || reason.includes('unrelated')) {
-          ruleTriggered = 'Rule 1: Spam/junk content'
-          errorMessage += 'Content appears to be spam, junk, or unrelated text'
-        } else if (reason.includes('contact') || reason.includes('personal') || reason.includes('phone') || reason.includes('email') || reason.includes('address')) {
-          ruleTriggered = 'Rule 2: Personal contact information'
-          errorMessage += 'Personal contact information is not allowed (phone numbers, emails, addresses, social handles)'
-        } else if (reason.includes('malicious') || reason.includes('hate') || reason.includes('harassment') || reason.includes('sexual') || reason.includes('harm')) {
-          ruleTriggered = 'Rule 3: Malicious content'
-          errorMessage += 'Content violates community guidelines (hate speech, harassment, inappropriate sexual content, or dangerous activity)'
-        } else if (reason.includes('link') || reason.includes('url') || reason.includes('irrelevant') || reason.includes('harmful')) {
-          ruleTriggered = 'Rule 4: Irrelevant/harmful links'
-          errorMessage += 'Links to irrelevant or harmful content are not allowed'
-        } else if (reason.includes('empty') || reason.includes('meaningful') || reason.includes('words') || reason.includes('content')) {
-          ruleTriggered = 'Rule 5: Empty/near-empty content'
-          errorMessage += 'Please provide more meaningful content (less than 3 meaningful words detected)'
+      // Evaluate with AI
+      console.log('Evaluating idea with AI...')
+      const evaluation = await evaluateIdea(submissionData)
+      
+      let visible = evaluation.valid
+      let rejectionReason = null
+      
+      if (!evaluation.valid) {
+        rejectionReason = evaluation.reason
+        visible = false
+        console.log(`Rejected: ${evaluation.explanation}`)
+        setError(`Rejected: ${evaluation.explanation}`)
+      }
+
+      // Check if this device has submitted this idea before
+      const { data: existingSubmissions } = await supabase
+        .from('ideas')
+        .select('submission_attempts')
+        .eq('device_id', getDeviceId())
+        .ilike('product_idea', `%${formData.productIdea}%`)
+        .single()
+
+      const submissionAttempts = existingSubmissions ? existingSubmissions.submission_attempts + 1 : 1
+
+      // Insert into database
+      const { data, error } = await supabase
+        .from('ideas')
+        .insert({
+          full_name: submissionData.fullName,
+          who_to_serve: submissionData.whoToServe,
+          product_idea: submissionData.productIdea,
+          categories: submissionData.categories,
+          source: submissionData.source,
+          device_id: submissionData.device_id,
+          user_pain_points: submissionData.userPainPoints,
+          existing_alternatives: submissionData.existingAlternatives,
+          user_capabilities: submissionData.userCapabilities,
+          visible: visible,
+          rejection_reason: rejectionReason,
+          score: evaluation.score || 0,
+          submission_attempts: submissionAttempts
+        })
+        .select()
+        .single()
+
+      if (error) {
+        console.error('Database error:', error)
+        if (error.code === '42501') {
+          setError('Permission Denied (RLS)')
+          console.error('Permission Denied (RLS)')
         } else {
-          errorMessage += evaluation.rejection_reason
+          setError(`System Error: ${error.message}`)
+          console.error(`System Error: ${error.message}`)
+        }
+      } else {
+        if (evaluation.valid) {
+          setSuccess('Submission accepted')
+          console.log('Submission accepted')
+          // Clear form and draft
+          setFormData({
+            fullName: '',
+            whoToServe: '',
+            productIdea: '',
+            categories: [],
+            source: '',
+            otherSource: '',
+            userPainPoints: '',
+            existingAlternatives: '',
+            userCapabilities: ''
+          })
+          clearDraft()
         }
         
-        console.log(`OpenAI Content Rejection: ${ruleTriggered} - ${evaluation.rejection_reason}`)
-        showMessage('idea', errorMessage, 8000)
-        setLoading(prev => ({ ...prev, idea: false }))
-        return
+        setLastSubmissionTime()
+        updateRateLimit()
+        loadIdeas()
+        loadMySubmissions()
       }
-
-      // Step 3: Submit to database
-      console.log('Step 3: Submitting to database...')
-      const result = await submitIdea(submissionData)
-      
-      setLastSubmissionTime(Date.now())
-      localStorage.setItem('last_submission_time', Date.now().toString())
-      
-      // Clear form
-      setFormData({
-        full_name: '',
-        who_to_serve: '',
-        product_idea: '',
-        categories: [],
-        source: '',
-        other_source: ''
-      })
-      localStorage.removeItem('antithesis_form_data')
-      
-      showMessage('idea', `Idea submitted successfully! Quality score: ${evaluation.rough_score}/100`, 5000)
-      console.log('System Success: Idea submitted successfully with score', evaluation.rough_score, result)
-      
-      // Reload data
-      loadData()
-      
-    } catch (error) {
-      console.error('System Error: Failed to submit idea', error)
-      
-      if (error.message.includes('security policy')) {
-        console.log('RLS Policy Decline: Access denied by security policy')
-        showMessage('idea', 'Access denied by security policy', 5000)
-      } else {
-        showMessage('idea', `Error: ${error.message}`, 5000)
-      }
+    } catch (err) {
+      console.error('Submission error:', err)
+      setError(`System Error: ${err.message}`)
     } finally {
-      setLoading(prev => ({ ...prev, idea: false }))
+      setIsLoading(false)
     }
   }
 
   const handleFeedbackSubmit = async (e) => {
     e.preventDefault()
     
-    // Check minimum word count
-    if (getWordCount(feedbackData.feedback_text) < 15) {
-      showMessage('feedback', 'Feedback must be at least 15 words', 3000)
-      return
-    }
-    
-    if (getWordCount(feedbackData.feedback_text) > 125) {
-      showMessage('feedback', 'Feedback must be 125 words or less', 3000)
+    if (!feedbackData.feedbackText.trim()) {
+      setError('Feedback text is required')
       return
     }
 
-    setLoading(prev => ({ ...prev, feedback: true }))
-    
+    if (getWordCount(feedbackData.feedbackText) > 125) {
+      setError('Feedback must be 125 words or less')
+      return
+    }
+
+    setIsLoading(true)
+    setError('')
+
     try {
-      console.log('Starting OpenAI feedback evaluation...')
-      await evaluateFeedback(feedbackData.feedback_text)
+      // Evaluate feedback for spam
+      console.log('Evaluating feedback with AI...')
+      const evaluation = await evaluateFeedback(feedbackData.feedbackText)
       
-      await submitFeedback(feedbackData)
-      
-      setFeedbackData({ feedback_text: '', contact_info: '' })
-      localStorage.removeItem('antithesis_feedback_data')
-      
-      showMessage('feedback', 'Feedback submitted successfully!', 5000)
-      console.log('System Success: Feedback submitted successfully')
-      
-    } catch (error) {
-      console.error('System Error: Failed to submit feedback', error)
-      
-      if (error.message.includes('rejected')) {
-        console.log('OpenAI Content Rejection: Feedback blocked -', error.message)
-        let errorMessage = 'Feedback rejected: '
-        
-        // Determine which rule was triggered
-        const reason = error.message.toLowerCase()
-        if (reason.includes('spam') || reason.includes('junk')) {
-          errorMessage += 'Content appears to be spam or irrelevant'
-        } else if (reason.includes('contact') || reason.includes('personal')) {
-          errorMessage += 'Personal contact information is not allowed'
-        } else if (reason.includes('malicious') || reason.includes('inappropriate')) {
-          errorMessage += 'Content violates community guidelines'
-        } else if (reason.includes('link')) {
-          errorMessage += 'Irrelevant or harmful links are not allowed'
-        } else if (reason.includes('empty') || reason.includes('meaningful')) {
-          errorMessage += 'Please provide more meaningful feedback'
-        } else {
-          errorMessage = error.message
-        }
-        
-        showMessage('feedback', errorMessage, 8000)
-      } else if (error.message.includes('security policy')) {
-        console.log('RLS Policy Decline: Access denied by security policy')
-        showMessage('feedback', 'Access denied by security policy', 5000)
-      } else {
-        showMessage('feedback', `Error: ${error.message}`, 5000)
+      if (!evaluation.valid) {
+        setError('Rejected: Feedback appears to be spam or inappropriate')
+        console.log('Rejected: Feedback flagged as spam')
+        return
       }
+
+      const { error } = await supabase
+        .from('feedback')
+        .insert({
+          feedback_text: feedbackData.feedbackText,
+          contact_info: feedbackData.contactInfo || null,
+          device_id: getDeviceId()
+        })
+
+      if (error) {
+        console.error('Feedback submission error:', error)
+        setError(`System Error: ${error.message}`)
+      } else {
+        setSuccess('Feedback submitted successfully')
+        console.log('Feedback submitted successfully')
+        setFeedbackData({ feedbackText: '', contactInfo: '' })
+      }
+    } catch (err) {
+      console.error('Feedback error:', err)
+      setError(`System Error: ${err.message}`)
     } finally {
-      setLoading(prev => ({ ...prev, feedback: false }))
+      setIsLoading(false)
     }
   }
 
+  const formatTime = (seconds) => {
+    return Math.ceil(seconds / 1000)
+  }
+
+  const InfoIcon = ({ tooltip }) => (
+    <div className="info-icon" data-tooltip={tooltip}>
+      ?
+    </div>
+  )
+
   return (
-    <div className="container">
-      {/* Top Row */}
+    <div className="dashboard">
+      {/* Language Selector */}
+      <div className="language-selector">
+        <select 
+          value={currentLanguage} 
+          onChange={(e) => {
+            setCurrentLang(e.target.value)
+            setCurrentLanguage(e.target.value)
+          }}
+        >
+          {SUPPORTED_LANGUAGES.map(lang => (
+            <option key={lang.code} value={lang.code}>
+              {lang.name}
+            </option>
+          ))}
+        </select>
+      </div>
+
+      {/* Header */}
+      <div className="header">
+        <h1>{getUIText('appTitle')}</h1>
+      </div>
+
+      {/* Error/Success Messages */}
+      {error && <div className="error-message">{error}</div>}
+      {success && <div className="success-message">{success}</div>}
+
+      {/* Top Row - Ideas Lists */}
       <div className="top-row">
-        {/* Ideas List */}
-        <div className="card">
-          <div className="refresh-indicator">
-            <div className="clock-icon">⏰</div>
-            <span>Refreshing in {refreshTimer}s</span>
+        {/* All Ideas */}
+        <div className="ideas-list">
+          <div className="list-header">
+            <h2>{getUIText('allIdeas')}</h2>
+            <div className="refresh-timer">
+              <span>🕒</span>
+              <span>{refreshTimer}{getUIText('seconds')}</span>
+            </div>
           </div>
-          <h2>Ideas ({ideas.length})</h2>
-          <div className="scrollable">
-            {ideas.map(idea => (
-              <div
-                key={idea.id}
-                className={`idea-item ${!idea.visible ? 'hidden' : ''}`}
-                onClick={() => setSelectedIdea(idea)}
-              >
-                <div style={{ fontWeight: '600', marginBottom: '4px' }}>
-                  {idea.full_name}
+          {ideas.map(idea => (
+            <div 
+              key={idea.id} 
+              className={`idea-item ${!idea.visible ? 'hidden' : ''}`}
+              onClick={() => setSelectedIdea(idea)}
+            >
+              <h3>{idea.full_name}</h3>
+              <p><strong>Serves:</strong> {idea.who_to_serve}</p>
+              <p><strong>Idea:</strong> {idea.visible ? idea.product_idea : '••••••••••••••••••••'}</p>
+              {idea.categories && (
+                <div className="idea-categories">
+                  {idea.categories.map(cat => (
+                    <span key={cat} className="category-tag">
+                      {getUIText(`categories.${cat}`)}
+                    </span>
+                  ))}
                 </div>
-                <div style={{ fontSize: '14px', color: '#666' }}>
-                  {!idea.visible ? '*** Content Hidden ***' : 
-                   idea.product_idea.substring(0, 100) + (idea.product_idea.length > 100 ? '...' : '')}
-                </div>
-                <div style={{ fontSize: '12px', color: '#999', marginTop: '4px' }}>
-                  {new Date(idea.timestamp).toLocaleDateString()}
-                </div>
-              </div>
-            ))}
-            {ideas.length === 0 && (
-              <div style={{ textAlign: 'center', color: '#666', padding: '20px' }}>
-                No ideas yet
-              </div>
-            )}
-          </div>
+              )}
+              {idea.score && <p><strong>Score:</strong> {idea.score}/100</p>}
+            </div>
+          ))}
         </div>
 
         {/* My Submissions */}
-        <div className="card">
-          <div className="refresh-indicator">
-            <div className="clock-icon">⏰</div>
-            <span>Refreshing in {refreshTimer}s</span>
+        <div className="my-submissions">
+          <div className="list-header">
+            <h2>{getUIText('mySubmissions')}</h2>
+            <div className="refresh-timer">
+              <span>🕒</span>
+              <span>{refreshTimer}{getUIText('seconds')}</span>
+            </div>
           </div>
-          <h2>My Submissions ({mySubmissions.length})</h2>
-          <div className="scrollable">
-            {mySubmissions.map(submission => (
-              <div
-                key={submission.id}
-                className="submission-item"
-                onClick={() => setSelectedIdea(submission)}
-              >
-                <div style={{ fontWeight: '600', marginBottom: '4px' }}>
-                  {submission.visible ? '✅ Approved' : '❌ Hidden'}
-                </div>
-                <div style={{ fontSize: '14px' }}>
-                  {submission.product_idea.substring(0, 80) + (submission.product_idea.length > 80 ? '...' : '')}
-                </div>
-                <div style={{ fontSize: '12px', color: '#999', marginTop: '4px' }}>
-                  {new Date(submission.timestamp).toLocaleDateString()}
-                </div>
-                {submission.rejection_reason && (
-                  <div style={{ fontSize: '12px', color: 'var(--accent3)', marginTop: '2px' }}>
-                    Reason: {submission.rejection_reason}
-                  </div>
-                )}
-              </div>
-            ))}
-            {mySubmissions.length === 0 && (
-              <div style={{ textAlign: 'center', color: '#666', padding: '20px' }}>
-                No submissions yet
-              </div>
-            )}
-          </div>
+          {mySubmissions.map(idea => (
+            <div 
+              key={idea.id} 
+              className="idea-item"
+              onClick={() => setSelectedIdea(idea)}
+            >
+              <h3>{idea.full_name}</h3>
+              <p><strong>Status:</strong> {idea.visible ? 'Approved' : 'Rejected'}</p>
+              <p><strong>Idea:</strong> {idea.product_idea}</p>
+              {idea.rejection_reason && (
+                <p><strong>Reason:</strong> {idea.rejection_reason}</p>
+              )}
+              {idea.score && <p><strong>Score:</strong> {idea.score}/100</p>}
+            </div>
+          ))}
         </div>
       </div>
 
-      {/* Middle Row */}
-      <div className="middle-row">
-        {/* Submission Form */}
-        <div className="card">
-          <h2>Submit Your Idea</h2>
-          {messages.idea && (
-            <div className={`message ${messages.idea.includes('Error') || messages.idea.includes('rejected') || messages.idea.includes('wait') ? 'error' : 'success'}`}>
-              {messages.idea}
-            </div>
-          )}
-          <form onSubmit={handleIdeaSubmit}>
+      {/* Middle Row - Submission Form */}
+      <div className="submission-form">
+        <h2>{getUIText('submitIdea')}</h2>
+        <form onSubmit={handleSubmit}>
+          <div className="form-grid">
             <div className="form-group">
-              <label>Full Name *</label>
+              <label>{getUIText('fullName')}</label>
               <input
                 type="text"
-                value={formData.full_name}
-                onChange={(e) => handleFormChange('full_name', e.target.value)}
+                value={formData.fullName}
+                onChange={(e) => handleInputChange('fullName', e.target.value)}
                 required
-                maxLength={100}
               />
             </div>
 
             <div className="form-group">
-              <label>Who You Serve *</label>
-              <input
-                type="text"
-                value={formData.who_to_serve}
-                onChange={(e) => handleFormChange('who_to_serve', e.target.value)}
-                required
-                maxLength={250}
-              />
-              <div className={`word-count ${getWordCount(formData.who_to_serve) > 50 ? 'over-limit' : ''} ${getWordCount(formData.who_to_serve) < 10 ? 'under-limit' : ''}`}>
-                {getWordCount(formData.who_to_serve)}/50 words (minimum: 10)
-              </div>
-            </div>
-
-            <div className="form-group">
-              <label>Product Idea *</label>
+              <label>
+                {getUIText('whoYouServe')}
+                <InfoIcon tooltip={getUIText('tooltips.whoYouServe')} />
+              </label>
               <textarea
-                value={formData.product_idea}
-                onChange={(e) => handleFormChange('product_idea', e.target.value)}
+                value={formData.whoToServe}
+                onChange={(e) => handleInputChange('whoToServe', e.target.value)}
                 required
-                maxLength={750}
-                rows={4}
               />
-              <div className={`word-count ${getWordCount(formData.product_idea) > 150 ? 'over-limit' : ''} ${getWordCount(formData.product_idea) < 25 ? 'under-limit' : ''}`}>
-                {getWordCount(formData.product_idea)}/150 words (minimum: 25)
+              <div className={`word-counter ${getWordCount(formData.whoToServe) > 50 ? 'warning' : ''}`}>
+                {getWordCount(formData.whoToServe)}/50 {getUIText('wordLimit')}
+              </div>
+            </div>
+
+            <div className="form-group full-width">
+              <label>
+                {getUIText('productIdea')}
+                <InfoIcon tooltip={getUIText('tooltips.productIdea')} />
+              </label>
+              <textarea
+                value={formData.productIdea}
+                onChange={(e) => handleInputChange('productIdea', e.target.value)}
+                required
+              />
+              <div className={`word-counter ${getWordCount(formData.productIdea) > 150 ? 'warning' : ''}`}>
+                {getWordCount(formData.productIdea)}/150 {getUIText('wordLimit')}
               </div>
             </div>
 
             <div className="form-group">
-              <label>Categories</label>
-              <div className="checkbox-group">
+              <label>
+                {getUIText('userPainPoints')}
+                <InfoIcon tooltip={getUIText('tooltips.userPainPoints')} />
+              </label>
+              <textarea
+                value={formData.userPainPoints}
+                onChange={(e) => handleInputChange('userPainPoints', e.target.value)}
+              />
+            </div>
+
+            <div className="form-group">
+              <label>
+                {getUIText('existingAlternatives')}
+                <InfoIcon tooltip={getUIText('tooltips.existingAlternatives')} />
+              </label>
+              <textarea
+                value={formData.existingAlternatives}
+                onChange={(e) => handleInputChange('existingAlternatives', e.target.value)}
+              />
+            </div>
+
+            <div className="form-group">
+              <label>
+                {getUIText('userCapabilities')}
+                <InfoIcon tooltip={getUIText('tooltips.userCapabilities')} />
+              </label>
+              <textarea
+                value={formData.userCapabilities}
+                onChange={(e) => handleInputChange('userCapabilities', e.target.value)}
+              />
+            </div>
+
+            <div className="form-group full-width">
+              <label>{getUIText('categories')}</label>
+              <div className="categories-grid">
                 {CATEGORIES.map(category => (
-                  <div key={category} className="checkbox-item">
+                  <div key={category} className="category-checkbox">
                     <input
                       type="checkbox"
                       id={category}
                       checked={formData.categories.includes(category)}
-                      onChange={() => handleFormChange('categories', category)}
+                      onChange={() => handleCategoryToggle(category)}
                     />
-                    <label htmlFor={category}>{category}</label>
+                    <label htmlFor={category}>{getUIText(`categories.${category}`)}</label>
                   </div>
                 ))}
               </div>
             </div>
 
             <div className="form-group">
-              <label>How You Heard About Antithesis</label>
+              <label>{getUIText('howYouHeard')}</label>
               <select
                 value={formData.source}
-                onChange={(e) => handleFormChange('source', e.target.value)}
+                onChange={(e) => handleInputChange('source', e.target.value)}
+                required
               >
                 <option value="">Select...</option>
-                {HEAR_ABOUT_OPTIONS.map(option => (
-                  <option key={option} value={option}>{option}</option>
+                {SOURCES.map(source => (
+                  <option key={source} value={source}>
+                    {getUIText(`sources.${source}`)}
+                  </option>
                 ))}
               </select>
-            </div>
-
-            {formData.source === 'Other' && (
-              <div className="form-group">
-                <label>Please specify</label>
-                <input
-                  type="text"
-                  value={formData.other_source}
-                  onChange={(e) => handleFormChange('other_source', e.target.value)}
-                  maxLength={100}
-                />
-              </div>
-            )}
-
-            <button
-              type="submit"
-              className="btn"
-              disabled={loading.idea || !canSubmitIdea()}
-            >
-              {loading.idea ? 'Submitting...' : 
-               !canSubmitIdea() ? 
-               `Wait ${Math.ceil((60000 - (Date.now() - lastSubmissionTime)) / 1000)}s` : 
-               'Submit Idea'}
-            </button>
-          </form>
-        </div>
-
-        {/* Mini Guide & Process Diagram */}
-        <div className="card">
-          <h2>Submission Guide</h2>
-          
-          <div style={{ marginBottom: '20px' }}>
-            <h3 style={{ color: 'var(--accent3)', fontSize: '14px', marginBottom: '8px' }}>
-              ❌ This is NOT how to submit
-            </h3>
-            <div style={{ background: '#ffebee', padding: '10px', borderRadius: '6px', fontSize: '12px', marginBottom: '15px' }}>
-              "Make an app" or "Social media platform" or "john.doe@email.com call me at 555-1234"
-            </div>
-            
-            <h3 style={{ color: 'var(--primary)', fontSize: '14px', marginBottom: '8px' }}>
-              ✅ This is a good submission
-            </h3>
-            <div style={{ background: 'var(--accent1)', padding: '10px', borderRadius: '6px', fontSize: '12px' }}>
-              "A mobile app that helps elderly people connect with nearby volunteers for grocery shopping and errands, featuring real-time tracking and safety verification."
+              {formData.source === 'other' && (
+                <div className="other-source">
+                  <input
+                    type="text"
+                    placeholder="Please specify..."
+                    value={formData.otherSource}
+                    onChange={(e) => handleInputChange('otherSource', e.target.value)}
+                    required
+                  />
+                </div>
+              )}
             </div>
           </div>
 
-          <h2>Process Overview</h2>
-          <div className="process-diagram">
-            <div className="process-step">
-              <strong>1. Submit:</strong> Your idea gets AI-checked for spam & privacy
-            </div>
-            <div className="process-step">
-              <strong>2. Round 1-2:</strong> OpenAI evaluates ideas on 10 criteria:
-              Problem Significance, Market Fit, Uniqueness, Feasibility, Scalability, Competition, Business Viability, Adoption Potential, Risk, Impact
-            </div>
-            <div className="process-step">
-              <strong>3. Round 3:</strong> Human judging selects top ~10% of ideas
-            </div>
-            <div className="process-step">
-              <strong>4. S&P 500 Stage:</strong> NGOs & mentors provide funding/mentoring for selected ideas
-            </div>
-            <div className="process-step">
-              <strong>5. Feedback:</strong> Users can provide anonymous feedback or contact info for collaboration
-            </div>
-          </div>
-        </div>
-      </div>
+          <button 
+            type="submit" 
+            className="submit-button"
+            disabled={isLoading || !canSubmit() || rateLimitTime > 0}
+          >
+            {isLoading ? <span className="loading"></span> : getUIText('submitButton')}
+          </button>
 
-      {/* Bottom Row */}
-      <div className="bottom-row">
-        <div className="card">
-          <h2>Feedback</h2>
-          {messages.feedback && (
-            <div className={`message ${messages.feedback.includes('Error') || messages.feedback.includes('rejected') ? 'error' : 'success'}`}>
-              {messages.feedback}
+          {rateLimitTime > 0 && (
+            <div className="rate-limit-message">
+              {getUIText('rateLimitMessage', { time: formatTime(rateLimitTime) })}
             </div>
           )}
-          <form onSubmit={handleFeedbackSubmit}>
-            <div className="form-group">
-              <label>Your Feedback *</label>
-              <textarea
-                value={feedbackData.feedback_text}
-                onChange={(e) => setFeedbackData(prev => ({ ...prev, feedback_text: e.target.value }))}
-                required
-                maxLength={625}
-                rows={3}
-                placeholder="Share your thoughts about the platform or ideas..."
-              />
-              <div className={`word-count ${getWordCount(feedbackData.feedback_text) > 125 ? 'over-limit' : ''} ${getWordCount(feedbackData.feedback_text) < 15 ? 'under-limit' : ''}`}>
-                {getWordCount(feedbackData.feedback_text)}/125 words (minimum: 15)
-              </div>
-            </div>
+        </form>
+      </div>
 
-            <div className="form-group">
-              <label>Contact Info (Optional)</label>
-              <input
-                type="text"
-                value={feedbackData.contact_info}
-                onChange={(e) => setFeedbackData(prev => ({ ...prev, contact_info: e.target.value }))}
-                maxLength={100}
-                placeholder="Email or social media handle (optional)"
-              />
-            </div>
-
-            <button
-              type="submit"
-              className="btn"
-              disabled={loading.feedback}
-            >
-              {loading.feedback ? 'Submitting...' : 'Submit Feedback'}
-            </button>
-          </form>
+      {/* Process Diagram */}
+      <div className="process-diagram">
+        <h2>{getUIText('processFlow')}</h2>
+        <div className="process-steps">
+          <div className="process-step">
+            <h3>AI Evaluation</h3>
+            <p>{getUIText('aiEvaluation')}</p>
+          </div>
+          <div className="process-arrow">→</div>
+          <div className="process-step">
+            <h3>Scoring</h3>
+            <p>{getUIText('scoring')}</p>
+          </div>
+          <div className="process-arrow">→</div>
+          <div className="process-step">
+            <h3>Human Review</h3>
+            <p>{getUIText('humanReview')}</p>
+          </div>
+          <div className="process-arrow">→</div>
+          <div className="process-step">
+            <h3>Mentoring</h3>
+            <p>{getUIText('mentoring')}</p>
+          </div>
         </div>
       </div>
 
-      {/* Modal for idea details */}
+      {/* Feedback Form */}
+      <div className="feedback-form">
+        <h2>{getUIText('feedback')}</h2>
+        <form onSubmit={handleFeedbackSubmit}>
+          <div className="form-group">
+            <textarea
+              placeholder={getUIText('feedbackPlaceholder')}
+              value={feedbackData.feedbackText}
+              onChange={(e) => setFeedbackData(prev => ({ ...prev, feedbackText: e.target.value }))}
+              required
+            />
+            <div className={`word-counter ${getWordCount(feedbackData.feedbackText) > 125 ? 'warning' : ''}`}>
+              {getWordCount(feedbackData.feedbackText)}/125 {getUIText('wordLimit')}
+            </div>
+          </div>
+          <div className="form-group">
+            <input
+              type="text"
+              placeholder={getUIText('contactInfo')}
+              value={feedbackData.contactInfo}
+              onChange={(e) => setFeedbackData(prev => ({ ...prev, contactInfo: e.target.value }))}
+            />
+          </div>
+          <button type="submit" className="submit-button" disabled={isLoading}>
+            {isLoading ? <span className="loading"></span> : getUIText('submitFeedback')}
+          </button>
+        </form>
+      </div>
+
+      {/* Modal for detailed view */}
       {selectedIdea && (
         <div className="modal" onClick={() => setSelectedIdea(null)}>
-          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
-            <div className="modal-header">
-              <h2>{selectedIdea.full_name}</h2>
-              <button className="close-btn" onClick={() => setSelectedIdea(null)}>
-                ×
-              </button>
-            </div>
-            <div>
-              <p><strong>Who They Serve:</strong></p>
-              <p style={{ marginBottom: '15px' }}>
-                {!selectedIdea.visible ? '*** Content Hidden ***' : selectedIdea.who_to_serve}
-              </p>
-              
-              <p><strong>Product Idea:</strong></p>
-              <p style={{ marginBottom: '15px' }}>
-                {!selectedIdea.visible ? '*** Content Hidden ***' : selectedIdea.product_idea}
-              </p>
-              
-              {selectedIdea.categories && selectedIdea.categories.length > 0 && (
-                <>
-                  <p><strong>Categories:</strong></p>
-                  <p style={{ marginBottom: '15px' }}>
-                    {selectedIdea.categories.join(', ')}
-                  </p>
-                </>
-              )}
-              
-              {selectedIdea.source && (
-                <>
-                  <p><strong>Source:</strong></p>
-                  <p style={{ marginBottom: '15px' }}>{selectedIdea.source}</p>
-                </>
-              )}
-              
-              <p style={{ fontSize: '12px', color: '#666' }}>
-                Submitted: {new Date(selectedIdea.timestamp).toLocaleString()}
-              </p>
-              
-              {selectedIdea.rejection_reason && (
-                <p style={{ fontSize: '12px', color: 'var(--accent3)', marginTop: '10px' }}>
-                  <strong>Rejection Reason:</strong> {selectedIdea.rejection_reason}
-                </p>
-              )}
-            </div>
+          <div className="modal-content" onClick={e => e.stopPropagation()}>
+            <button className="modal-close" onClick={() => setSelectedIdea(null)}>×</button>
+            <h2>{selectedIdea.full_name}</h2>
+            <p><strong>Who They Serve:</strong> {selectedIdea.who_to_serve}</p>
+            <p><strong>Product Idea:</strong> {selectedIdea.product_idea}</p>
+            {selectedIdea.user_pain_points && (
+              <p><strong>Pain Points:</strong> {selectedIdea.user_pain_points}</p>
+            )}
+            {selectedIdea.existing_alternatives && (
+              <p><strong>Alternatives:</strong> {selectedIdea.existing_alternatives}</p>
+            )}
+            {selectedIdea.user_capabilities && (
+              <p><strong>User Capabilities:</strong> {selectedIdea.user_capabilities}</p>
+            )}
+            {selectedIdea.categories && (
+              <p><strong>Categories:</strong> {selectedIdea.categories.join(', ')}</p>
+            )}
+            <p><strong>Source:</strong> {selectedIdea.source}</p>
+            {selectedIdea.score && <p><strong>Score:</strong> {selectedIdea.score}/100</p>}
+            {selectedIdea.rejection_reason && (
+              <p><strong>Rejection Reason:</strong> {selectedIdea.rejection_reason}</p>
+            )}
+            <p><strong>Submitted:</strong> {new Date(selectedIdea.timestamp).toLocaleDateString()}</p>
           </div>
         </div>
       )}

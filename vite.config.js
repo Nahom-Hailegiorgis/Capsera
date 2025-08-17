@@ -7,15 +7,16 @@ export default defineConfig({
     react(),
     VitePWA({
       registerType: "autoUpdate",
-      includeAssets: ["logo.png"],
+      workbox: {
+        globPatterns: ["**/*.{js,css,html,ico,png,svg}"],
+      },
       manifest: {
-        name: "Antithesis Dashboard",
-        short_name: "Antithesis",
-        description: "Product Ideas Dashboard",
+        name: "Capsera",
+        short_name: "Capsera",
+        description: "Submit and browse innovative product ideas",
         theme_color: "#7776BC",
-        background_color: "#ffffff",
+        background_color: "#FFFFFF",
         display: "standalone",
-        start_url: "/",
         icons: [
           {
             src: "logo.png",
@@ -29,18 +30,9 @@ export default defineConfig({
           },
         ],
       },
-      workbox: {
-        maximumFileSizeToCacheInBytes: 5000000,
-        runtimeCaching: [
-          {
-            urlPattern: /^https:\/\/api\.openai\.com\//,
-            handler: "NetworkFirst",
-            options: {
-              cacheName: "openai-cache",
-            },
-          },
-        ],
-      },
     }),
   ],
+  css: {
+    postcss: false,
+  },
 });
