@@ -1,15 +1,375 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <link rel="icon" type="image/png" href="/logo.png" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="theme-color" content="#7776BC" />
-    <meta name="description" content="Submit and browse innovative product ideas" />
-    <title>Capsera</title>
-  </head>
-  <body>
-    <div id="root"></div>
-    <script type="module" src="/src/main.jsx"></script>
-  </body>
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Capsera - Idea Submission Platform</title>
+  <link rel="manifest" href="/manifest.json">
+  <link rel="icon" type="image/x-icon" href="/favicon.ico">
+  <meta name="theme-color" content="#f9bd45">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="container">
+    <!-- Navigation -->
+    <nav class="nav-tabs">
+      <button class="nav-tab active" data-screen="ideas" data-ui-key="Ideas">
+        Ideas
+      </button>
+      <button class="nav-tab" data-screen="submissions" data-ui-key="My Submissions">
+        My Submissions  
+      </button>
+      <button class="nav-tab" data-screen="submit" data-ui-key="Submit Ideas">
+        Submit Ideas
+      </button>
+      <button class="nav-tab" data-screen="settings" data-ui-key="Settings">
+        Settings
+      </button>
+    </nav>
+
+    <!-- Screen 1: Ideas List -->
+    <div id="ideas-screen" class="screen active">
+      <h2 data-ui-key="Ideas">Ideas</h2>
+      <div id="ideas-list">
+        <div class="loading" data-ui-key="Loading...">Loading...</div>
+      </div>
+    </div>
+
+    <!-- Screen 2: My Submissions -->
+    <div id="submissions-screen" class="screen">
+      <h2 data-ui-key="My Submissions">My Submissions</h2>
+      <div id="submissions-list">
+        <div class="loading" data-ui-key="Loading...">Loading...</div>
+      </div>
+    </div>
+
+    <!-- Screen 3: Submit Ideas -->
+    <div id="submit-screen" class="screen">
+      <h2 data-ui-key="Submit Ideas">Submit Ideas</h2>
+
+      <!-- User and Project Selection -->
+      <div class="user-project-selection">
+        <div class="form-group">
+          <label class="form-label">Select User</label>
+          <select id="user-select" class="form-select" required>
+            <option value="">Select User</option>
+          </select>
+        </div>
+        
+        <div class="form-group">
+          <label class="form-label">Select Project</label>
+          <select id="project-select" class="form-select" required>
+            <option value="">Select Project</option>
+          </select>
+        </div>
+      </div>
+
+      <form id="submit-form">
+        <!-- Customer Profile -->
+        <div class="form-group">
+          <label class="form-label" data-ui-key="Required">
+            Ideal Customer Profile <span class="required">*</span>
+          </label>
+          <div class="input-with-icon" data-tooltip-key="ideal_customer_profile">
+            <textarea id="ideal_customer_profile" name="ideal_customer_profile" 
+                     class="form-textarea" required
+                     placeholder="Describe who would use your product..."></textarea>
+            <span class="tooltip-icon">👁️
+              <span class="tooltip-text">
+                Describe who would use your product - their age, job, problems they face, etc.
+              </span>
+            </span>
+          </div>
+          <div id="ideal_customer_profile-count" class="word-counter">0 words (10-200)</div>
+        </div>
+
+        <!-- Product Idea -->
+        <div class="form-group">
+          <label class="form-label" data-ui-key="Required">
+            Product Idea <span class="required">*</span>
+          </label>
+          <div class="input-with-icon" data-tooltip-key="product_idea">
+            <textarea id="product_idea" name="product_idea" 
+                     class="form-textarea" required
+                     placeholder="Explain your product idea..."></textarea>
+            <span class="tooltip-icon">👁️
+              <span class="tooltip-text">
+                Explain your product idea clearly - what does it do and how does it help people?
+              </span>
+            </span>
+          </div>
+          <div id="product_idea-count" class="word-counter">0 words (15-300)</div>
+        </div>
+
+        <!-- Pain Points -->
+        <div class="form-group">
+          <label class="form-label" data-ui-key="Required">
+            Pain Points <span class="required">*</span>
+          </label>
+          <div class="input-with-icon" data-tooltip-key="pain_points">
+            <textarea id="pain_points" name="pain_points" 
+                     class="form-textarea" required
+                     placeholder="What problems does this solve?"></textarea>
+            <span class="tooltip-icon">👁️
+              <span class="tooltip-text">
+                What specific problems or frustrations does your target customer experience?
+              </span>
+            </span>
+          </div>
+          <div id="pain_points-count" class="word-counter">0 words (15-250)</div>
+        </div>
+
+        <!-- Alternatives -->
+        <div class="form-group">
+          <label class="form-label" data-ui-key="Required">
+            Alternatives <span class="required">*</span>
+          </label>
+          <div class="input-with-icon" data-tooltip-key="alternatives">
+            <textarea id="alternatives" name="alternatives" 
+                     class="form-textarea" required
+                     placeholder="What similar solutions exist?"></textarea>
+            <span class="tooltip-icon">👁️
+              <span class="tooltip-text">
+                What similar products or solutions already exist? How is yours different?
+              </span>
+            </span>
+          </div>
+          <div id="alternatives-count" class="word-counter">0 words (5-200)</div>
+        </div>
+
+        <!-- Category (Multi-select) -->
+        <div class="form-group">
+          <label class="form-label" data-tooltip-key="category">
+            Categories <span class="optional"> | Hold CTRL to select multiple categories!</span>
+          </label>
+          <select id="category" name="category" class="form-select" multiple>
+            <option value="Technology">Technology</option>
+            <option value="Healthcare">Healthcare</option>
+            <option value="Education">Education</option>
+            <option value="Finance">Finance</option>
+            <option value="Entertainment">Entertainment</option>
+            <option value="Food & Beverage">Food & Beverage</option>
+            <option value="Transportation">Transportation</option>
+            <option value="Communication">Communication</option>
+            <option value="Productivity">Productivity</option>
+            <option value="Social Impact">Social Impact</option>
+            <option value="E-commerce">E-commerce</option>
+            <option value="Gaming">Gaming</option>
+            <option value="Travel">Travel</option>
+            <option value="Fitness & Wellness">Fitness & Wellness</option>
+            <option value="Environment">Environment</option>
+            <option value="Other">Other</option>
+          </select>
+        </div>
+
+        <!-- Heard About -->
+        <div class="form-group">
+          <label class="form-label" data-tooltip-key="heard_about">
+            How did you hear about Capsera? <span class="optional">(Optional)</span>
+          </label>
+          <select id="heard_about" name="heard_about" class="form-select">
+            <option value="">Select...</option>
+            <option value="Social Media">Social Media</option>
+            <option value="Friend/Family">Friend/Family</option>
+            <option value="Search Engine">Search Engine</option>
+            <option value="News/Blog">News/Blog</option>
+            <option value="Advertisement">Advertisement</option>
+            <option value="Event/Conference">Event/Conference</option>
+            <option value="Other">Other</option>
+          </select>
+        </div>
+
+        <button type="submit" class="btn btn-primary" data-ui-key="Submit">
+          Submit Idea
+        </button>
+      </form>
+    </div>
+
+    <!-- Screen 4: Settings -->
+    <div id="settings-screen" class="screen">
+      <h2 data-ui-key="Settings">Settings</h2>
+
+      <!-- Language Selection -->
+      <div class="settings-section">
+        <h3 data-ui-key="Choose language">Choose Language</h3>
+        <div id="language-selector" class="language-selector">
+          <!-- Language options populated by JS -->
+        </div>
+      </div>
+
+      <!-- Users Management -->
+      <div class="settings-section">
+        <h3>Users</h3>
+        <div id="users-list">
+          <div class="loading" data-ui-key="Loading...">Loading...</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal Overlay Template (Created dynamically) -->
+  <style>
+    .modal-overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0, 0, 0, 0.5);
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      z-index: 1000;
+    }
+
+    .modal-content {
+      background: white;
+      padding: 4%;
+      border-radius: 8px;
+      max-width: 90%;
+      max-height: 90%;
+      overflow-y: auto;
+      position: relative;
+    }
+
+    .modal-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 3%;
+      padding-bottom: 2%;
+      border-bottom: 1px solid var(--capsera-border);
+    }
+
+    .modal-header h3 {
+      margin: 0;
+      color: var(--capsera-deep);
+    }
+
+    .modal-header button {
+      background: none;
+      border: none;
+      font-size: 1.5rem;
+      cursor: pointer;
+      color: var(--capsera-deep);
+    }
+
+    .modal-body {
+      line-height: 1.6;
+    }
+
+    .idea-details h4 {
+      color: var(--capsera-deep);
+      margin-top: 3%;
+      margin-bottom: 1%;
+    }
+
+    .idea-details p {
+      margin-bottom: 2%;
+    }
+
+    .feedback-section {
+      margin-top: 6%;
+      padding-top: 4%;
+      border-top: 2px solid var(--capsera-border);
+    }
+
+    .feedback-section h3 {
+      color: var(--capsera-deep);
+      margin-bottom: 3%;
+    }
+
+    .projects-overview {
+      margin-bottom: 4%;
+      background: var(--capsera-light-gray);
+      padding: 3%;
+      border-radius: 4px;
+    }
+
+    .project-overview {
+      background: white;
+      padding: 2%;
+      margin-bottom: 2%;
+      border-radius: 4px;
+      border-left: 4px solid var(--capsera-accent);
+    }
+
+    .project-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 1%;
+    }
+
+    .project-preview {
+      font-size: 0.9rem;
+      color: #666;
+    }
+
+    .status {
+      padding: 1% 2%;
+      border-radius: 12px;
+      font-size: 0.8rem;
+      font-weight: 500;
+    }
+
+    .status.success {
+      background: #e6ffe6;
+      color: var(--capsera-success);
+    }
+
+    .status.warning {
+      background: #fff7e6;
+      color: #856404;
+    }
+
+    .user-project-selection {
+      background: var(--capsera-light-gray);
+      padding: 4%;
+      border-radius: 8px;
+      margin-bottom: 4%;
+    }
+
+    .required {
+      color: var(--capsera-error);
+    }
+
+    .optional {
+      color: #666;
+      font-weight: normal;
+      font-size: 0.9rem;
+    }
+
+    .settings-section {
+      margin-bottom: 6%;
+    }
+
+    .settings-section h3 {
+      color: var(--capsera-deep);
+      margin-bottom: 3%;
+    }
+
+    @media (min-width: 768px) {
+      .modal-content {
+        max-width: 70%;
+        padding: 3%;
+      }
+      
+      .user-project-selection {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 4%;
+      }
+    }
+
+    @media (min-width: 1024px) {
+      .modal-content {
+        max-width: 60%;
+      }
+    }
+  </style>
+
+  <!-- Scripts -->
+  <script type="module" src="app.js"></script>
+</body>
 </html>

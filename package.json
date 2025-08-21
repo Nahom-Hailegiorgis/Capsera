@@ -1,30 +1,20 @@
 {
-  "name": "capsera",
-  "private": true,
-  "version": "0.1.0",
-  "type": "module",
+  "name": "capsera-pwa",
+  "version": "1.0.0",
+  "description": "Capsera MVP Progressive Web App",
+  "main": "index.html",
   "scripts": {
-    "dev": "vite",
-    "build": "vite build",
-    "lint": "eslint . --ext js,jsx --report-unused-disable-directives --max-warnings 0",
-    "preview": "vite preview"
+    "dev": "http-server . -p 3000",
+    "build": "echo 'No build needed for vanilla PWA'"
   },
   "dependencies": {
-    "@supabase/supabase-js": "^2.38.0",
-    "openai": "^4.100.0",
-    "react": "^19.1.1",
-    "react-dom": "^19.1.1"
+    "@supabase/supabase-js": "^2.55.0",
+    "localforage": "^1.10.0"
   },
   "devDependencies": {
-    "@types/react": "^19.1.10",
-    "@types/react-dom": "^19.1.7",
-    "@vitejs/plugin-react": "^5.0.0",
-    "eslint": "^9.33.0",
-    "eslint-plugin-react": "^7.37.2",
-    "eslint-plugin-react-hooks": "^5.2.0",
-    "eslint-plugin-react-refresh": "^0.4.5",
-    "vite": "^5.4.19",
-    "vite-plugin-pwa": "^0.17.5",
-    "workbox-window": "^7.0.0"
-  }
+    "http-server": "^14.1.1"
+  },
+  "keywords": ["pwa", "idea-submission", "mvp"],
+  "author": "Capsera Team",
+  "license": "MIT"
 }
