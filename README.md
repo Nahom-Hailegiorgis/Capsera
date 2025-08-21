@@ -1,108 +1,49 @@
-Capsera is a progressive web app (PWA) built to help people capture, refine, and submit innovative ideas. It works offline first, syncs with Supabase when connected, and provides AI-powered feedback on submissions.
+# Capsera
 
-Features
+Capsera is a **Progressive Web App (PWA)** designed to help people capture, refine, and submit innovative ideas. It works offline first, syncs with **Supabase** when connected, and provides **AI-powered feedback** on submissions.
 
-Offline support — works without Wi-Fi using service workers and local storage.
+> This is MVP Version 1. Currently in testing and development. Not intended for public use.
 
-Ideas screen — browse community ideas (details view depends on the EUREKA flag).
+---
 
-My submissions — track your own drafts and final ideas, protected with a local 4-digit PIN.
+## Features
 
-Submit ideas — guided form with tooltips and multi-language support.
+- **Offline support** — Works without Wi-Fi using service workers and local storage.  
+- **Ideas screen** — Browse community ideas (detailed view depends on the EUREKA flag).  
+- **My submissions** — Track your own drafts and final ideas, protected with a local 4-digit PIN.  
+- **Submit ideas** — Guided form with tooltips and multi-language support.  
+- **Settings** — Change UI language, view/delete users, manage device data.  
+- **AI feedback** — OpenAI evaluates draft ideas and suggests improvements.  
+- **Developer feedback** — Submit anonymous feedback directly to the team.
 
-Settings — change UI language, view/delete users, manage device data.
+---
 
-AI feedback — OpenAI evaluates draft ideas and suggests improvements.
+## Tech Stack
 
-Developer feedback — submit anonymous feedback directly to the team.
+- **Frontend:** HTML, CSS (custom, no Tailwind), JavaScript  
+- **Backend:** Supabase (Postgres, RLS, Edge Functions)  
+- **APIs:**  
+  - OpenAI (idea evaluation)  
+  - Google Translate (UI translations + tooltips)
 
-Tech Stack
+---
 
-Frontend: HTML, CSS (custom, no Tailwind), JavaScript
+## About
 
-Backend: Supabase (Postgres, RLS, Edge Functions)
+Capsera is an AI-driven idea platform dedicated to connecting **brilliant but overlooked innovators** with resources, mentorship, and financial support to bring their products to life and serve others.
 
-APIs:
+---
 
-OpenAI (idea evaluation)
+## Founders
 
-Google Translate (UI translations + tooltips)
+- **Shourya** — Harvard Undergraduate Ventures-Tech Summer Program 2025  
+- **Sahasra** — Harvard Undergraduate Ventures-Tech Summer Program 2025  
+- **Nahom** — Harvard Undergraduate Ventures-Tech Summer Program 2025
 
-File Structure
-capsera/
-├── index.html
-├── app.js
-├── styles.css
-├── manifest.json
-├── sw.js
-│
-├── helpers/
-│ ├── db.js
-│ ├── supabase.js
-│ ├── validation.js
-│ └── translate.js
-│
-├── edge-functions/
-│ └── get-idea-details.js
-│
-├── config/
-│ ├── package.json
-│ └── .env.example
+---
 
-Getting Started
+## Notes
 
-Clone the repo
-
-git clone https://github.com/your-username/capsera.git
-cd capsera
-
-Install dependencies
-
-npm install
-
-Environment variables
-Copy .env.example to .env and fill in your keys:
-
-SUPABASE_URL
-
-SUPABASE_ANON_KEY
-
-SUPABASE_SERVICE_ROLE_KEY
-
-OPENAI_API_KEY
-
-GOOGLE_TRANSLATE_KEY
-
-EUREKA (true/false)
-
-Run locally
-
-npm run dev
-
-Deploy
-
-Push client to a static host (e.g., Vercel, Netlify).
-
-Deploy Edge Functions to Supabase.
-
-Database Setup
-
-Run the SQL provided in /config/schema.sql (or see project docs) to create:
-
-ideas table
-
-feedback table
-
-users table
-
-ideas_public view
-
-Row-level security (RLS) policies are included for safe anonymous inserts and controlled reads.
-
-Notes
-
-All PIN codes stay on the device, never sent to Supabase.
-
-Only ideas_public view is queryable by anonymous clients.
-
-Full idea details require EUREKA=true and a server-side function.
+- This project is **currently in testing and development**.  
+- Use of real API keys or sensitive data should be done via `.env` and **never committed to the repo**.  
+- Designed as MVP; future versions may expand functionality and accessibility.
