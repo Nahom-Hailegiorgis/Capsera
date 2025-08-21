@@ -5,7 +5,7 @@
   "main": "index.html",
   "scripts": {
     "dev": "http-server . -p 3000",
-    "build": "echo 'No build needed for vanilla PWA'"
+    "build": "node scripts/generate-env.js && echo 'No build needed for vanilla PWA'"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.55.0",
