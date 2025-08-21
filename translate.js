@@ -1,8 +1,7 @@
 // translate.js - Enhanced Google Translate API integration with loading screens
 import { dbHelper } from "./db.js";
 
-const GOOGLE_TRANSLATE_KEY =
-  window.ENV?.GOOGLE_TRANSLATE_KEY || "AIzaSyBvuYk5QOYyD848gLxKHYPQUI8v2k7I2dU";
+const GOOGLE_TRANSLATE_KEY = window.ENV?.GOOGLE_TRANSLATE_KEY;
 
 export const translator = {
   supportedLangs: ["en", "am", "fr", "sw", "ar"],
@@ -210,10 +209,7 @@ export const translator = {
 
   // Enhanced translate single text with retry logic
   async translateText(text, targetLang, retries = 2) {
-    if (
-      !GOOGLE_TRANSLATE_KEY ||
-      GOOGLE_TRANSLATE_KEY === "TODO_FILL_GOOGLE_TRANSLATE_KEY"
-    ) {
+    if (!GOOGLE_TRANSLATE_KEY) {
       console.warn("Google Translate API key not configured");
       return text; // Return original text
     }
