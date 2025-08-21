@@ -7,6 +7,17 @@
   <link rel="manifest" href="/manifest.json">
   <link rel="icon" type="image/x-icon" href="/favicon.ico">
   <meta name="theme-color" content="#f9bd45">
+   <script>
+    window.ENV = {
+      SUPABASE_URL: "{{ SUPABASE_URL }}",
+      SUPABASE_ANON_KEY: "{{ SUPABASE_ANON_KEY }}",
+      OPENAI_API_KEY: "{{ OPENAI_API_KEY }}",
+      GOOGLE_TRANSLATE_KEY: "{{ GOOGLE_TRANSLATE_KEY }}",
+      EUREKA: {{ EUREKA }},
+      EDGE_FUNCTION_URL: "{{ EDGE_FUNCTION_URL }}"
+    };
+    console.log("Environment configuration loaded:", window.ENV);
+  </script>
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
@@ -370,17 +381,6 @@
   </style>
 
   <!-- Scripts -->
-  <script>
-    window.ENV = {
-      SUPABASE_URL: "{{ SUPABASE_URL }}",
-      SUPABASE_ANON_KEY: "{{ SUPABASE_ANON_KEY }}",
-      OPENAI_API_KEY: "{{ OPENAI_API_KEY }}",
-      GOOGLE_TRANSLATE_KEY: "{{ GOOGLE_TRANSLATE_KEY }}",
-      EUREKA: {{ EUREKA }},
-      EDGE_FUNCTION_URL: "{{ EDGE_FUNCTION_URL }}"
-    };
-    console.log("Environment configuration loaded");
-  </script>
   <script type="module" src="app.js"></script>
 </body>
 </html>
