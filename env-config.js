@@ -8,4 +8,5 @@ window.ENV = {
   EDGE_FUNCTION_URL: "__EDGE_FUNCTION_URL__",
 };
 
+console.log("__SUPABASE_URL__");
 console.log("Environment configuration loaded");
