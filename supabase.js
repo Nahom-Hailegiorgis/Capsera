@@ -1,10 +1,11 @@
-// supabase.js - Supabase client configuration with Netlify Functions integration
+// supabase.js - Supabase client configuration with enhanced structured AI grading
 import { createClient } from "https://cdn.skypack.dev/@supabase/supabase-js@2.39.3";
 
-// Get config from public environment variables
+// Get config from environment variables or use placeholders
 const SUPABASE_URL = window.ENV?.SUPABASE_URL;
 const SUPABASE_ANON_KEY = window.ENV?.SUPABASE_ANON_KEY;
-const EDGE_FUNCTION_URL = window.ENV?.EDGE_FUNCTION_URL || `${SUPABASE_URL}/functions/v1`;
+const EDGE_FUNCTION_URL =
+  window.ENV?.EDGE_FUNCTION_URL || `${SUPABASE_URL}/functions/v1`;
 
 // Create Supabase client with anonymous access
 export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
@@ -32,6 +33,7 @@ export const supabaseHelper = {
   },
 
   // Get idea details (via Edge Function for EUREKA check)
+  // Add this debug version to your supabase.js getIdeaDetails method
   async getIdeaDetails(ideaId) {
     console.log("🔍 DEBUG: Starting getIdeaDetails for:", ideaId);
     console.log("🔍 DEBUG: EDGE_FUNCTION_URL:", EDGE_FUNCTION_URL);
@@ -51,6 +53,10 @@ export const supabaseHelper = {
 
       console.log("🔍 DEBUG: Response status:", response.status);
       console.log("🔍 DEBUG: Response ok:", response.ok);
+      console.log(
+        "🔍 DEBUG: Response headers:",
+        Object.fromEntries(response.headers.entries())
+      );
 
       if (response.status === 403) {
         const data = await response.json();
@@ -69,6 +75,8 @@ export const supabaseHelper = {
       return { restricted: false, data };
     } catch (error) {
       console.error("🔍 DEBUG: Catch block error:", error);
+      console.error("🔍 DEBUG: Error message:", error.message);
+      console.error("🔍 DEBUG: Error stack:", error.stack);
       return {
         restricted: true,
         error: "Unable to load details",
@@ -96,7 +104,7 @@ export const supabaseHelper = {
             alternatives: submission.alternatives,
             category: submission.category || [],
             heard_about: submission.heard_about,
-            ai_feedback: submission.ai_feedback,
+            ai_feedback: submission.ai_feedback, // Now contains structured critique and grading
             quality_score: submission.quality_score,
           },
         ])
@@ -119,15 +127,15 @@ export const supabaseHelper = {
   },
 
   // Create user after successful final submission
-  async createUser(fullName) {
+  // Create user after successful final submission
+  async createUser(fullName, deviceId) {
     try {
       const { data, error } = await supabase
         .from("users")
-        .insert([{ full_name: fullName }])
+        .insert([{ full_name: fullName, device_id: deviceId }])
         .select();
 
       if (error) {
-        // User might already exist, which is fine
         console.warn("User creation warning:", error);
         return null;
       }
@@ -140,6 +148,8 @@ export const supabaseHelper = {
   },
 
   // Submit feedback - Enhanced
+  // Replace the submitFeedback method in supabase.js with this enhanced version
+
   async submitFeedback(feedbackData) {
     console.log("🔧 SUPABASE: Starting feedback submission", {
       device_id: feedbackData.device_id,
@@ -194,8 +204,7 @@ export const supabaseHelper = {
       throw error;
     }
   },
-
-  // Check feedback submission status
+  // Also add a method to check feedback submission status
   async checkFeedbackConnection() {
     try {
       console.log("🔧 SUPABASE FEEDBACK: Testing connection");
@@ -219,18 +228,18 @@ export const supabaseHelper = {
   },
 
   // Get all users (for settings screen)
-  async getAllUsers() {
+  async getAllUsers(deviceId) {
     try {
       const { data, error } = await supabase
         .from("users")
         .select("*")
+        .eq("device_id", deviceId) // filter by device
         .order("created_at", { ascending: false });
 
       if (error) {
         console.error("Error fetching users:", error);
         return [];
       }
-
       return data || [];
     } catch (error) {
       console.error("Error in getAllUsers:", error);
@@ -239,12 +248,13 @@ export const supabaseHelper = {
   },
 
   // Delete user (would need additional logic for PIN verification)
-  async deleteUser(fullName) {
+  async deleteUser(fullName, deviceId) {
     try {
       const { error } = await supabase
         .from("users")
         .delete()
-        .eq("full_name", fullName);
+        .eq("full_name", fullName)
+        .eq("device_id", deviceId); // make sure deletion is device-specific
 
       if (error) {
         console.error("Error deleting user:", error);
@@ -272,47 +282,157 @@ export const supabaseHelper = {
     }
   },
 
-  // **UPDATED: OpenAI integration now uses Netlify Function**
+  // Enhanced OpenAI integration with structured critique and grading
   async getAIFeedback(submission) {
-    console.log("🤖 Getting AI feedback via Netlify Function...");
+    const OPENAI_API_KEY = window.ENV?.OPENAI_API_KEY;
+
+    if (!OPENAI_API_KEY || OPENAI_API_KEY === "TODO_FILL_OPENAI_API_KEY") {
+      console.warn("OpenAI API key not configured");
+      return this.getMockAIFeedback();
+    }
 
     try {
-      const response = await fetch('/.netlify/functions/openai-feedback', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify(submission)
-      });
+      const categoriesText = Array.isArray(submission.category)
+        ? submission.category.join(", ")
+        : submission.category || "None";
+
+      const response = await fetch(
+        "https://api.openai.com/v1/chat/completions",
+        {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${OPENAI_API_KEY}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            model: "gpt-3.5-turbo",
+            temperature: 0.3,
+            messages: [
+              {
+                role: "system",
+                content: `You are an expert business analyst providing structured feedback on startup ideas. 
+
+Analyze the idea thoroughly and provide feedback in this EXACT JSON structure:
+
+{
+  "critique": {
+    "strengths": ["specific strength 1", "specific strength 2", "specific strength 3"],
+    "weaknesses": ["specific weakness 1", "specific weakness 2", "specific weakness 3"]
+  },
+  "suggestions": [
+    "specific actionable suggestion 1",
+    "specific actionable suggestion 2", 
+    "specific actionable suggestion 3",
+    "specific actionable suggestion 4"
+  ],
+  "grading": {
+    "problem_significance": {
+      "score": 0-10,
+      "reasoning": "brief explanation for this score"
+    },
+    "target_audience": {
+      "score": 0-10,
+      "reasoning": "brief explanation for this score"
+    },
+    "uniqueness": {
+      "score": 0-10,
+      "reasoning": "brief explanation for this score"
+    },
+    "scalability": {
+      "score": 0-10,
+      "reasoning": "brief explanation for this score"
+    },
+    "competition": {
+      "score": 0-10,
+      "reasoning": "brief explanation for this score"
+    },
+    "business_viability": {
+      "score": 0-10,
+      "reasoning": "brief explanation for this score"
+    },
+    "adoption_potential": {
+      "score": 0-10,
+      "reasoning": "brief explanation for this score"
+    },
+    "risk_assessment": {
+      "score": 0-10,
+      "reasoning": "brief explanation for this score (higher score = lower risk)"
+    },
+    "impact_potential": {
+      "score": 0-10,
+      "reasoning": "brief explanation for this score"
+    }
+  },
+  "overall_score": 0-100,
+  "summary": "2-3 sentence overall assessment"
+}
+
+Be honest and constructive. Focus on specific, actionable insights.`,
+              },
+              {
+                role: "user",
+                content: `Please analyze this startup idea:
+
+TARGET CUSTOMER: ${submission.ideal_customer_profile}
+
+PRODUCT IDEA: ${submission.product_idea}
+
+PAIN POINTS ADDRESSED: ${submission.pain_points}
+
+EXISTING ALTERNATIVES: ${submission.alternatives}
+
+CATEGORIES: ${categoriesText}
+
+Provide structured critique, suggestions, and detailed grading for each criterion.`,
+              },
+            ],
+            max_tokens: 3000,
+          }),
+        }
+      );
 
       if (!response.ok) {
-        throw new Error(`Netlify function error: ${response.status}`);
+        throw new Error(`OpenAI API error: ${response.status}`);
       }
 
-      const result = await response.json();
-      
-      // Handle mock responses from the function
-      if (result.mock) {
-        console.log("🤖 Using mock AI feedback from function");
-        return result.data;
+      const data = await response.json();
+      const content = data.choices[0].message.content.trim();
+
+      // Parse JSON response
+      const feedback = JSON.parse(content);
+
+      // Validate structure
+      if (
+        !feedback.critique ||
+        !feedback.suggestions ||
+        !feedback.grading ||
+        typeof feedback.overall_score !== "number"
+      ) {
+        throw new Error("Invalid AI response format");
       }
 
-      // Handle error responses with fallback
-      if (!result.critique || !result.grading) {
-        console.warn("🤖 Invalid AI response, using mock feedback");
-        return this.getMockAIFeedback();
+      // Calculate overall score from individual scores if not provided or seems wrong
+      const scores = Object.values(feedback.grading).map((item) => item.score);
+      const calculatedScore = Math.round(
+        (scores.reduce((a, b) => a + b, 0) / scores.length) * 10
+      );
+
+      if (Math.abs(feedback.overall_score - calculatedScore) > 15) {
+        feedback.overall_score = calculatedScore;
       }
 
-      console.log("🤖 AI feedback received with score:", result.overall_score);
-      return result;
-
+      console.log(
+        "🔧 AI FEEDBACK DEBUG: Generated structured feedback with score:",
+        feedback.overall_score
+      );
+      return feedback;
     } catch (error) {
-      console.error("🤖 AI feedback function error:", error);
+      console.error("AI feedback error:", error);
       return this.getMockAIFeedback();
     }
   },
 
-  // Mock AI feedback fallback (kept for error cases)
+  // Updated mock AI feedback with structured format
   getMockAIFeedback() {
     const scores = {
       problem_significance: Math.floor(Math.random() * 4) + 5, // 5-8
