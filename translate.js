@@ -1,7 +1,7 @@
 // translate.js - Enhanced Google Translate API integration with loading screens
 import { dbHelper } from "./db.js";
 
-const GOOGLE_TRANSLATE_KEY = process.ENV.GOOGLE_TRANSLATE_KEY;
+const GOOGLE_TRANSLATE_KEY = process.env.GOOGLE_TRANSLATE_KEY;
 
 export const translator = {
   supportedLangs: ["en", "am", "fr", "sw", "ar"],
