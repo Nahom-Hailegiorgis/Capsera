@@ -369,7 +369,17 @@
     }
   </style>
 
-  <!-- Scripts -->
+  <!-- Scripts: Load public environment config first -->
+  <script>
+    // Public environment configuration - loaded directly in HTML for immediate availability
+    // Only contains keys that are safe to expose in the browser
+    window.ENV = {
+      SUPABASE_URL: "REPLACE_WITH_YOUR_SUPABASE_URL", // Replace with your actual URL
+      SUPABASE_ANON_KEY: "REPLACE_WITH_YOUR_SUPABASE_ANON_KEY", // Replace with your actual anon key
+      EUREKA: true, // Feature flag
+      EDGE_FUNCTION_URL: "REPLACE_WITH_YOUR_EDGE_FUNCTION_URL", // Replace with your actual edge function URL
+    };
+
+    console.log("Public environment configuration loaded");
+  </script>
   <script type="module" src="app.js"></script>
-</body>
-</html>
