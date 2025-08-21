@@ -1,7 +1,5 @@
-// translate.js - Enhanced Google Translate API integration with loading screens
+// translate.js - Enhanced Google Translate integration with Netlify Functions
 import { dbHelper } from "./db.js";
-
-const GOOGLE_TRANSLATE_KEY = process.env.GOOGLE_TRANSLATE_KEY;
 
 export const translator = {
   supportedLangs: ["en", "am", "fr", "sw", "ar"],
@@ -207,13 +205,8 @@ export const translator = {
     }
   },
 
-  // Enhanced translate single text with retry logic
+  // **UPDATED: Translate single text using Netlify Function**
   async translateText(text, targetLang, retries = 2) {
-    if (!GOOGLE_TRANSLATE_KEY) {
-      console.warn("Google Translate API key not configured");
-      return text; // Return original text
-    }
-
     // Skip translation for very short or non-translatable content
     if (!text || text.length < 2 || /^[0-9\s\-_:/.]+$/.test(text)) {
       return text;
@@ -221,38 +214,45 @@ export const translator = {
 
     for (let attempt = 0; attempt <= retries; attempt++) {
       try {
-        const url = `https://translation.googleapis.com/language/translate/v2?key=${GOOGLE_TRANSLATE_KEY}`;
-
-        const response = await fetch(url, {
-          method: "POST",
+        console.log(`🌐 Translating via Netlify Function: "${text.substring(0, 50)}..." to ${targetLang}`);
+        
+        const response = await fetch('/.netlify/functions/translate', {
+          method: 'POST',
           headers: {
-            "Content-Type": "application/json",
+            'Content-Type': 'application/json'
           },
           body: JSON.stringify({
-            q: text,
-            target: targetLang,
-            source: "en",
-            format: "text",
-          }),
+            text: text,
+            targetLang: targetLang,
+            sourceLang: 'en'
+          })
         });
 
         if (!response.ok) {
-          throw new Error(
-            `Translation API error: ${response.status} - ${response.statusText}`
-          );
+          throw new Error(`Netlify function error: ${response.status} - ${response.statusText}`);
         }
 
-        const data = await response.json();
-        const translatedText = data.data.translations[0].translatedText;
+        const result = await response.json();
+        
+        // Handle successful translation
+        if (result.success && result.translatedText) {
+          console.log(`🌐 Translation successful: "${result.translatedText.substring(0, 50)}..."`);
+          return result.translatedText;
+        }
+        
+        // Handle API key not configured or other errors
+        if (!result.success) {
+          console.warn(`🌐 Translation failed: ${result.error || 'Unknown error'}`);
+          return text; // Return original text
+        }
 
-        // Decode HTML entities that might be returned
-        const textarea = document.createElement("textarea");
-        textarea.innerHTML = translatedText;
-        return textarea.value;
+        return text; // Fallback to original text
+
       } catch (error) {
-        console.error(`Translation attempt ${attempt + 1} failed:`, error);
+        console.error(`🌐 Translation attempt ${attempt + 1} failed:`, error);
 
         if (attempt === retries) {
+          console.warn(`🌐 All translation attempts failed, returning original text`);
           return text; // Return original text after all retries failed
         }
 
