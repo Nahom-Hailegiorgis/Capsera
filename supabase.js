@@ -2,10 +2,13 @@
 import { createClient } from "https://cdn.skypack.dev/@supabase/supabase-js@2.39.3";
 
 // Get config from environment variables or use placeholders
-const SUPABASE_URL = window.ENV?.SUPABASE_URL;
-const SUPABASE_ANON_KEY = window.ENV?.SUPABASE_ANON_KEY;
-const EDGE_FUNCTION_URL =
-  window.ENV?.EDGE_FUNCTION_URL || `${SUPABASE_URL}/functions/v1`;
+const SUPABASE_URL = window.ENV.SUPABASE_URL;
+const SUPABASE_ANON_KEY = window.ENV.SUPABASE_ANON_KEY;
+const EDGE_FUNCTION_URL = window.ENV.EDGE_FUNCTION_URL;
+
+if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
+  throw new Error("Supabase URL and ANON key are required!");
+}
 
 // Create Supabase client with anonymous access
 export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
@@ -284,7 +287,7 @@ export const supabaseHelper = {
 
   // Enhanced OpenAI integration with structured critique and grading
   async getAIFeedback(submission) {
-    const OPENAI_API_KEY = window.ENV?.OPENAI_API_KEY;
+    const OPENAI_API_KEY = window.ENV.OPENAI_API_KEY;
 
     if (!OPENAI_API_KEY || OPENAI_API_KEY === "TODO_FILL_OPENAI_API_KEY") {
       console.warn("OpenAI API key not configured");
