@@ -2810,20 +2810,26 @@ Also remove these from db.js:
   }
 
   async selectExistingUser(fullName) {
-    const pin = prompt("Enter your 4-digit PIN:");
-    if (!pin) return;
-
-    const localUser = await dbHelper.getUser(fullName);
-    if (!localUser || dbHelper.hashPin(pin) !== localUser.pin_hash) {
-      this.showMessage("Invalid PIN", "error");
-      return;
-    }
-
-    this.currentUser = fullName;
-    this.currentProject = null;
-    await this.setupProjectSelectOptions(); // Load projects for selected user
-    this.showMessage(`Switched to ${fullName}`, "success");
+  const pin = prompt("Enter your 4-digit PIN:");
+  if (!pin) {
+    // Reset dropdown to default if user cancels
+    document.getElementById("user-select").value = "";
+    return;
   }
+
+  const localUser = await dbHelper.getUser(fullName);
+  if (!localUser || dbHelper.hashPin(pin) !== localUser.pin_hash) {
+    this.showMessage("Invalid PIN", "error");
+    // Reset dropdown to default state on invalid PIN
+    document.getElementById("user-select").value = "";
+    return;
+  }
+
+  this.currentUser = fullName;
+  this.currentProject = null;
+  await this.setupProjectSelectOptions(); // Load projects for selected user
+  this.showMessage(`Switched to ${fullName}`, "success");
+}
 }
 
 // Initialize app when DOM is ready
