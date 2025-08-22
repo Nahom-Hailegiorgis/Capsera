@@ -2809,19 +2809,26 @@ Also remove these from db.js:
     this.showMessage(`User ${name} created`, "success");
   }
 
-  async selectExistingUser(fullName) {
+async selectExistingUser(fullName) {
   const pin = prompt("Enter your 4-digit PIN:");
   if (!pin) {
     // Reset dropdown to default if user cancels
-    document.getElementById("user-select").value = "";
+    const userSelect = document.getElementById("user-select");
+    if (userSelect) {
+      userSelect.value = "";
+    }
     return;
   }
 
   const localUser = await dbHelper.getUser(fullName);
   if (!localUser || dbHelper.hashPin(pin) !== localUser.pin_hash) {
     this.showMessage("Invalid PIN", "error");
-    // Reset dropdown to default state on invalid PIN
-    document.getElementById("user-select").value = "";
+    
+    // Reset dropdown to default "Select User" option
+    const userSelect = document.getElementById("user-select");
+    if (userSelect) {
+      userSelect.value = "";
+    }
     return;
   }
 
