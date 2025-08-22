@@ -2809,30 +2809,66 @@ Also remove these from db.js:
     this.showMessage(`User ${name} created`, "success");
   }
 
+// Replace the existing selectExistingUser method in your app.js with this fixed version:
+
 async selectExistingUser(fullName) {
-  const userSelect = document.getElementById("user-select");
-  const previousValue = this.currentUser || ""; // Store previous valid selection
-  
   const pin = prompt("Enter your 4-digit PIN:");
   if (!pin) {
     // User cancelled - reset dropdown to previous selection
-    userSelect.value = previousValue;
+    this.resetUserDropdownToPrevious();
     return;
   }
 
   const localUser = await dbHelper.getUser(fullName);
   if (!localUser || dbHelper.hashPin(pin) !== localUser.pin_hash) {
     this.showMessage("Invalid PIN", "error");
-    // Reset dropdown to previous valid selection on authentication failure
-    userSelect.value = previousValue;
+    // Reset dropdown to previous selection on invalid PIN
+    this.resetUserDropdownToPrevious();
     return;
   }
 
-  // Only update currentUser if authentication succeeds
+  // PIN is valid - proceed with user selection
   this.currentUser = fullName;
   this.currentProject = null;
   await this.setupProjectSelectOptions(); // Load projects for selected user
   this.showMessage(`Switched to ${fullName}`, "success");
+}
+
+// Add this new method to reset the user dropdown to the previous valid selection:
+resetUserDropdownToPrevious() {
+  const userSelect = document.getElementById("user-select");
+  if (!userSelect) return;
+
+  // Reset to the current valid user or default
+  if (this.currentUser) {
+    userSelect.value = this.currentUser;
+  } else {
+    userSelect.value = ""; // Reset to "Select User"
+  }
+
+  // Also clear project selection since user selection failed
+  const projectSelect = document.getElementById("project-select");
+  if (projectSelect) {
+    projectSelect.innerHTML = '<option value="">Select Project</option>';
+    this.currentProject = null;
+  }
+}
+
+// Also update the handleUserSelect method to track the previous selection:
+handleUserSelect(e) {
+  const selectedValue = e.target.value;
+  
+  if (selectedValue === "new") {
+    this.showUserCreationForm();
+  } else if (selectedValue) {
+    // Attempt to select existing user
+    this.selectExistingUser(selectedValue);
+  } else {
+    // User selected "Select User" option
+    this.currentUser = null;
+    this.currentProject = null;
+    this.setupProjectSelectOptions(); // This will clear project options
+  }
 }
 }
 
