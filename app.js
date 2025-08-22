@@ -2253,11 +2253,18 @@ Also remove these from db.js:
   }
 
   handleUserSelect(e) {
-    if (e.target.value === "new") {
-      this.showUserCreationForm();
-    } else if (e.target.value) {
-      this.selectExistingUser(e.target.value);
-    }
+  const selectedValue = e.target.value;
+  
+  if (selectedValue === "new") {
+    this.showUserCreationForm();
+  } else if (selectedValue) {
+    // Attempt to select existing user
+    this.selectExistingUser(selectedValue);
+  } else {
+    // User selected "Select User" option
+    this.currentUser = null;
+    this.currentProject = null;
+    this.setupProjectSelectOptions(); // This will clear project options
   }
 
   handleProjectSelect(e) {
@@ -2855,21 +2862,6 @@ resetUserDropdownToPrevious() {
 }
 
 // Also update the handleUserSelect method to track the previous selection:
-handleUserSelect(e) {
-  const selectedValue = e.target.value;
-  
-  if (selectedValue === "new") {
-    this.showUserCreationForm();
-  } else if (selectedValue) {
-    // Attempt to select existing user
-    this.selectExistingUser(selectedValue);
-  } else {
-    // User selected "Select User" option
-    this.currentUser = null;
-    this.currentProject = null;
-    this.setupProjectSelectOptions(); // This will clear project options
-  }
-}
 }
 
 // Initialize app when DOM is ready
