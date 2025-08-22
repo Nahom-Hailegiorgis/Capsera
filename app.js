@@ -214,13 +214,15 @@ class CapseraApp {
     `;
   }
 
-  setupFeedbackForm() {
-    console.log("🔧 FEEDBACK: Setting up feedback form");
+setupFeedbackForm() {
+  console.log("🔧 FEEDBACK: Setting up feedback form");
 
+  // Use a small delay to ensure DOM has updated after innerHTML changes
+  const trySetupForm = () => {
     const form = document.getElementById("feedback-form");
     if (!form) {
       console.error("🔧 FEEDBACK: Form element not found!");
-      return;
+      return false;
     }
 
     // Remove existing listeners to avoid duplicates
@@ -232,8 +234,9 @@ class CapseraApp {
       e.preventDefault();
       console.log("🔧 FEEDBACK: Form submission started");
 
-      const messageInput = document.getElementById("feedback-message");
-      const contactInput = document.getElementById("feedback-contact");
+      // Re-query elements from the new form to ensure they exist
+      const messageInput = newForm.querySelector("#feedback-message");
+      const contactInput = newForm.querySelector("#feedback-contact");
       const submitButton = newForm.querySelector('button[type="submit"]');
 
       const message = messageInput?.value?.trim();
@@ -301,7 +304,25 @@ class CapseraApp {
         }
       }
     });
+
+    return true; // Success
+  };
+
+  // Try immediately first
+  if (trySetupForm()) {
+    return;
   }
+
+  // If form not found, try again after a short delay to allow DOM to update
+  setTimeout(() => {
+    if (!trySetupForm()) {
+      // If still not found after delay, try once more with a longer delay
+      setTimeout(() => {
+        trySetupForm();
+      }, 100);
+    }
+  }, 10);
+}
 
   async viewIdeaDetails(ideaId) {
     const modal = document.createElement("div");
