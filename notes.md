@@ -1,1 +1,6 @@
-
+- when user is deleted & the a new user with the same name is created the projects still exist (get rid of them)
+- mysubmissions ui is so fat so make it compact & add more info down/up arrow buttons
+- languages only change some text so make it change all text
+- change required to the names of the inputs when making submissions
+- make this website load without wifi & work without wifi (only with downloaded app if necessary)
+- replace with languages hindi, bengali, telugu, marathi, and tamil
