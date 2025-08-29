@@ -1017,22 +1017,33 @@ async loadProjectSelect() {
 
  
 // Reverted showCreateUserModal method - separate user creation
+// Fixed showCreateUserModal method for the new app.js
 async showCreateUserModal() {
   const modal = this.createModal(
     'Create New User',
     `
-      <div class="form-group">
-        <label class="form-label">Enter your full name:</label>
-        <input type="text" id="new-user-name" class="form-input" placeholder="Your name" required>
-      </div>
-      <div class="form-group">
-        <label class="form-label">Create a 4-digit PIN for this account:</label>
-        <input type="number" id="new-user-pin" class="form-input" placeholder="1234" min="1000" max="9999" required>
-      </div>
+      <form id="create-user-form">
+        <div class="form-group">
+          <label class="form-label">Enter your full name:</label>
+          <input type="text" id="new-user-name" class="form-input" placeholder="Your name" required>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Create a 4-digit PIN for this account:</label>
+          <input type="number" id="new-user-pin" class="form-input" placeholder="1234" min="1000" max="9999" required>
+        </div>
+      </form>
     `,
     async () => {
-      const name = document.getElementById('new-user-name').value.trim();
-      const pin = document.getElementById('new-user-pin').value.trim();
+      const nameInput = document.getElementById('new-user-name');
+      const pinInput = document.getElementById('new-user-pin');
+      
+      if (!nameInput || !pinInput) {
+        this.showMessage("Form fields not found", "error");
+        return false;
+      }
+
+      const name = nameInput.value.trim();
+      const pin = pinInput.value.trim();
 
       if (!name) {
         this.showMessage("Please enter your name", "error");
@@ -1044,15 +1055,30 @@ async showCreateUserModal() {
         return false;
       }
 
-      await dbHelper.createUser(name, pin);
-      this.showMessage("User created successfully", "success");
-      
-      // Reload user dropdown to include new user
-      await this.loadUserSelect();
-      
-      return true;
+      try {
+        await dbHelper.createUser(name, pin);
+        this.showMessage("User created successfully", "success");
+        
+        // Reload user dropdown to include new user
+        await this.loadUserSelect();
+        
+        return true;
+      } catch (error) {
+        console.error("Error creating user:", error);
+        this.showMessage("Failed to create user", "error");
+        return false;
+      }
     }
   );
+
+  // Add form submission handler to the modal
+  const form = modal.querySelector('#create-user-form');
+  if (form) {
+    form.addEventListener('submit', (e) => {
+      e.preventDefault();
+      modal.querySelector('.modal-confirm').click();
+    });
+  }
 }
 
  async showCreateProjectModal() {
