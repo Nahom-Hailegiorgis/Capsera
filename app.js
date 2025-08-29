@@ -1055,15 +1055,9 @@ async showCreateUserModal() {
       }
 
       try {
-        // Check if user already exists
-        const existingUsers = await dbHelper.getUsers();
-        if (existingUsers.includes(name)) {
-          this.showMessage("A user with this name already exists", "error");
-          return false;
-        }
-
+        // Call the correct dbHelper method that handles local storage with PIN
         await dbHelper.createUser(name, pin);
-        this.showMessage("User created successfully!", "success");
+        this.showMessage("User created successfully", "success");
         
         // Reload user dropdown to include new user
         await this.loadUserSelect();
@@ -1071,7 +1065,7 @@ async showCreateUserModal() {
         return true;
       } catch (error) {
         console.error("Error creating user:", error);
-        this.showMessage("Failed to create user. Please try again.", "error");
+        this.showMessage("Failed to create user", "error");
         return false;
       }
     }
@@ -1252,40 +1246,47 @@ async showCreateUserModal() {
     container.innerHTML = html;
   }
 
-  async deleteUser(userName) {
-    const pin = prompt(`Enter your 4-digit PIN to delete ${userName}:`);
+  // Fixed deleteUser method for app.js - properly cleans up projects
+async deleteUser(userName) {
+  const pin = prompt(`Enter your 4-digit PIN to delete ${userName}:`);
+  
+  if (!pin || pin.length !== 4 || !/^\d{4}$/.test(pin)) {
+    this.showMessage("PIN must be exactly 4 digits", "error");
+    return;
+  }
+
+  try {
+    const isValidPin = await dbHelper.validateUserPin(userName, pin);
     
-    if (!pin || pin.length !== 4 || !/^\d{4}$/.test(pin)) {
-      this.showMessage("PIN must be exactly 4 digits", "error");
+    if (!isValidPin) {
+      this.showMessage("Invalid PIN", "error");
       return;
     }
 
-    try {
-      const isValidPin = await dbHelper.validateUserPin(userName, pin);
-      
-      if (!isValidPin) {
-        this.showMessage("Oops! That PIN doesn't match", "error");
-        return;
+    // Delete user and all associated projects
+    await dbHelper.deleteUserWithProjects(userName);
+    this.showMessage("User and all associated projects deleted successfully", "success");
+    
+    // Refresh users list
+    await this.loadUsersManagement();
+    
+    // Clear current user if it was deleted
+    if (this.currentUser === userName) {
+      this.currentUser = null;
+      this.currentProject = null;
+      const userSelect = document.getElementById('user-select');
+      const projectSelect = document.getElementById('project-select');
+      if (userSelect) userSelect.value = '';
+      if (projectSelect) {
+        projectSelect.innerHTML = '<option value="">Select Project</option>';
       }
-
-      await dbHelper.deleteUser(userName);
-      this.showMessage("User deleted successfully", "success");
-      
-      // Refresh users list
-      await this.loadUsersManagement();
-      
-      // Clear current user if it was deleted
-      if (this.currentUser === userName) {
-        this.currentUser = null;
-        const userSelect = document.getElementById('user-select');
-        if (userSelect) userSelect.value = '';
-      }
-      
-    } catch (error) {
-      console.error("Delete user error:", error);
-      this.showMessage("Couldn't delete user - please try again", "error");
     }
+    
+  } catch (error) {
+    console.error("Delete user error:", error);
+    this.showMessage("Failed to delete user", "error");
   }
+}
 
   // Utility methods
   createModal(title, body, onConfirm) {
