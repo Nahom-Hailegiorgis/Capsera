@@ -1044,13 +1044,19 @@ async showCreateUserModal() {
         return false;
       }
 
-      await dbHelper.createUser(name, pin);
-      this.showMessage("User created successfully", "success");
-      
-      // Reload user dropdown to include new user
-      await this.loadUserSelect();
-      
-      return true;
+      try {
+        await dbHelper.createUser(name, pin);
+        this.showMessage("User created successfully", "success");
+        
+        // Reload user dropdown to include new user
+        await this.loadUserSelect();
+        
+        return true; // This tells the modal to close
+      } catch (error) {
+        console.error("Error creating user:", error);
+        this.showMessage("Failed to create user", "error");
+        return false; // Keep modal open
+      }
     }
   );
 }
@@ -1220,75 +1226,130 @@ async showCreateUserModal() {
     container.innerHTML = html;
   }
 
-  async deleteUser(userName) {
-    const pin = prompt(`Enter your 4-digit PIN to delete ${userName}:`);
+ 
+// Enhanced deleteUser method that cleans up associated data
+async deleteUser(userName) {
+  const pin = prompt(`Enter your 4-digit PIN to delete ${userName}:`);
+  
+  if (!pin || pin.length !== 4 || !/^\d{4}$/.test(pin)) {
+    this.showMessage("PIN must be exactly 4 digits", "error");
+    return;
+  }
+
+  try {
+    const isValidPin = await dbHelper.validateUserPin(userName, pin);
     
-    if (!pin || pin.length !== 4 || !/^\d{4}$/.test(pin)) {
-      this.showMessage("PIN must be exactly 4 digits", "error");
+    if (!isValidPin) {
+      this.showMessage("Oops! That PIN doesn't match", "error");
       return;
     }
 
-    try {
-      const isValidPin = await dbHelper.validateUserPin(userName, pin);
-      
-      if (!isValidPin) {
-        this.showMessage("Oops! That PIN doesn't match", "error");
-        return;
-      }
-
-      await dbHelper.deleteUser(userName);
-      this.showMessage("User deleted successfully", "success");
-      
-      // Refresh users list
-      await this.loadUsersManagement();
-      
-      // Clear current user if it was deleted
-      if (this.currentUser === userName) {
-        this.currentUser = null;
-        const userSelect = document.getElementById('user-select');
-        if (userSelect) userSelect.value = '';
-      }
-      
-    } catch (error) {
-      console.error("Delete user error:", error);
-      this.showMessage("Couldn't delete user - please try again", "error");
+    // Delete user and all associated data
+    await dbHelper.deleteUserAndData(userName);
+    this.showMessage("User and all associated data deleted successfully", "success");
+    
+    // Refresh users list
+    await this.loadUsersManagement();
+    
+    // Clear current user if it was deleted
+    if (this.currentUser === userName) {
+      this.currentUser = null;
+      this.currentProject = null;
+      const userSelect = document.getElementById('user-select');
+      const projectSelect = document.getElementById('project-select');
+      if (userSelect) userSelect.value = '';
+      if (projectSelect) projectSelect.value = '';
+      await this.loadProjectSelect(); // This will clear the projects
     }
+    
+  } catch (error) {
+    console.error("Delete user error:", error);
+    this.showMessage("Couldn't delete user - please try again", "error");
   }
+}
 
   // Utility methods
-  createModal(title, body, onConfirm) {
-    const overlay = document.createElement('div');
-    overlay.className = 'modal-overlay';
-    
-    overlay.innerHTML = `
-      <div class="modal-content">
-        <div class="modal-header">
-          <h3>${title}</h3>
-          <button onclick="this.closest('.modal-overlay').remove()">×</button>
-        </div>
-        <div class="modal-body">
-          ${body}
-        </div>
-        <div class="modal-footer">
-          <button class="btn btn-secondary" onclick="this.closest('.modal-overlay').remove()" data-ui-key="Cancel">Cancel</button>
-          <button class="btn btn-primary modal-confirm" data-ui-key="Confirm">Confirm</button>
-        </div>
+  
+// Fixed createModal method with proper event handling
+createModal(title, body, onConfirm) {
+  const overlay = document.createElement('div');
+  overlay.className = 'modal-overlay';
+  
+  overlay.innerHTML = `
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3>${title}</h3>
+        <button class="modal-close" onclick="this.closest('.modal-overlay').remove()">×</button>
       </div>
-    `;
-    
-    document.body.appendChild(overlay);
-    
-    if (onConfirm) {
-      overlay.querySelector('.modal-confirm').addEventListener('click', async () => {
+      <div class="modal-body">
+        ${body}
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary modal-cancel" data-ui-key="Cancel">Cancel</button>
+        <button class="btn btn-primary modal-confirm" data-ui-key="Confirm">Confirm</button>
+      </div>
+    </div>
+  `;
+  
+  document.body.appendChild(overlay);
+  
+  // Add event listeners after DOM insertion
+  const cancelButton = overlay.querySelector('.modal-cancel');
+  const confirmButton = overlay.querySelector('.modal-confirm');
+  const closeButton = overlay.querySelector('.modal-close');
+  
+  // Cancel button
+  if (cancelButton) {
+    cancelButton.addEventListener('click', () => {
+      overlay.remove();
+    });
+  }
+  
+  // Close button (X)
+  if (closeButton) {
+    closeButton.addEventListener('click', () => {
+      overlay.remove();
+    });
+  }
+  
+  // Confirm button with proper async handling
+  if (confirmButton && onConfirm) {
+    confirmButton.addEventListener('click', async (e) => {
+      e.preventDefault();
+      
+      // Disable button during processing
+      confirmButton.disabled = true;
+      confirmButton.textContent = 'Processing...';
+      
+      try {
         const result = await onConfirm();
+        
+        // Only close modal if onConfirm returns true (success)
         if (result !== false) {
           overlay.remove();
         }
-      });
-    }
-    
-    return overlay;
+      } catch (error) {
+        console.error('Modal confirm error:', error);
+        this.showMessage('An error occurred', 'error');
+      } finally {
+        // Re-enable button if modal is still open
+        if (document.body.contains(overlay)) {
+          confirmButton.disabled = false;
+          confirmButton.textContent = 'Confirm';
+        }
+      }
+    });
   }
+  
+  // Close on overlay click (outside modal)
+  overlay.addEventListener('click', (e) => {
+    if (e.target === overlay) {
+      overlay.remove();
+    }
+  });
+  
+  return overlay;
+}
 
   clearForm() {
     const form = document.getElementById('submit-form');
