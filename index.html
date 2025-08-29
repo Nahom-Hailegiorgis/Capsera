@@ -35,7 +35,7 @@
       </div>
     </div>
 
-    <!-- Screen 2: My Submissions -->
+    <!-- Screen 2: My Submissions with Sidebar Layout -->
     <div id="submissions-screen" class="screen">
       <h2 data-ui-key="My Submissions">My Submissions</h2>
       <div id="submissions-list">
@@ -50,16 +50,16 @@
       <!-- User and Project Selection -->
       <div class="user-project-selection">
         <div class="form-group">
-          <label class="form-label">Select User</label>
+          <label class="form-label" data-ui-key="Select User">Select User</label>
           <select id="user-select" class="form-select" required>
-            <option value="">Select User</option>
+            <option value="" data-ui-key="Select User">Select User</option>
           </select>
         </div>
         
         <div class="form-group">
-          <label class="form-label">Select Project</label>
+          <label class="form-label" data-ui-key="Select Project">Select Project</label>
           <select id="project-select" class="form-select" required>
-            <option value="">Select Project</option>
+            <option value="" data-ui-key="Select Project">Select Project</option>
           </select>
         </div>
       </div>
@@ -67,80 +67,85 @@
       <form id="submit-form">
         <!-- Customer Profile -->
         <div class="form-group">
-          <label class="form-label" data-ui-key="Describe who would use your product">
-            Ideal Customer Profile <span class="required">*</span>
+          <label class="form-label" data-ui-key="Required">
+            <span data-ui-key="Ideal Customer Profile">Ideal Customer Profile</span> <span class="required">*</span>
           </label>
           <div class="input-with-icon" data-tooltip-key="ideal_customer_profile">
             <textarea id="ideal_customer_profile" name="ideal_customer_profile" 
                      class="form-textarea" required
-                     placeholder="Describe who would use your product..."></textarea>
-            <span class="tooltip-icon">👁️
+                     data-ui-key="Describe who would use your product..."
+                     placeholder="Tell us about your ideal user - who are they, what do they do, what frustrates them?"></textarea>
+            <span class="tooltip-icon">💡
               <span class="tooltip-text">
-                Describe who would use your product - their age, job, problems they face, etc.
+                Paint us a picture of your perfect user! Think about their age, job, daily challenges, and what makes them tick.
               </span>
             </span>
           </div>
-          <div id="ideal_customer_profile-count" class="word-counter">0 words (10-200)</div>
+          <div id="ideal_customer_profile-count" class="word-counter">0 words • Start typing!</div>
         </div>
 
         <!-- Product Idea -->
         <div class="form-group">
-          <label class="form-label" data-ui-key="Explain your product idea">
-            Product Idea <span class="required">*</span>
+          <label class="form-label" data-ui-key="Required">
+            <span data-ui-key="Product Idea">Product Idea</span> <span class="required">*</span>
           </label>
           <div class="input-with-icon" data-tooltip-key="product_idea">
             <textarea id="product_idea" name="product_idea" 
                      class="form-textarea" required
-                     placeholder="Explain your product idea..."></textarea>
-            <span class="tooltip-icon">👁️
+                     data-ui-key="Explain your product idea..."
+                     placeholder="What's your big idea? How does it work and what makes it special?"></textarea>
+            <span class="tooltip-icon">🚀
               <span class="tooltip-text">
-                Explain your product idea clearly - what does it do and how does it help people?
+                This is where you shine! Explain your idea like you're telling your best friend about something amazing.
               </span>
             </span>
           </div>
-          <div id="product_idea-count" class="word-counter">0 words (15-300)</div>
+          <div id="product_idea-count" class="word-counter">0 words • Start typing!</div>
         </div>
 
         <!-- Pain Points -->
         <div class="form-group">
-          <label class="form-label" data-ui-key="What problems does this solve?">
-            Pain Points <span class="required">*</span>
+          <label class="form-label" data-ui-key="Required">
+            <span data-ui-key="Pain Points">Pain Points</span> <span class="required">*</span>
           </label>
           <div class="input-with-icon" data-tooltip-key="pain_points">
             <textarea id="pain_points" name="pain_points" 
                      class="form-textarea" required
-                     placeholder="What problems does this solve?"></textarea>
-            <span class="tooltip-icon">👁️
+                     data-ui-key="What problems does this solve?"
+                     placeholder="What problems or frustrations does your idea fix?"></textarea>
+            <span class="tooltip-icon">🎯
               <span class="tooltip-text">
-                What specific problems or frustrations does your target customer experience?
+                What keeps your target users up at night? What makes them go "ugh, there has to be a better way!"
               </span>
             </span>
           </div>
-          <div id="pain_points-count" class="word-counter">0 words (15-250)</div>
+          <div id="pain_points-count" class="word-counter">0 words • Start typing!</div>
         </div>
 
         <!-- Alternatives -->
         <div class="form-group">
-          <label class="form-label" data-ui-key="What similar solutions exist?">
-            Alternatives <span class="required">*</span>
+          <label class="form-label" data-ui-key="Required">
+            <span data-ui-key="Alternatives">Alternatives</span> <span class="required">*</span>
           </label>
           <div class="input-with-icon" data-tooltip-key="alternatives">
             <textarea id="alternatives" name="alternatives" 
                      class="form-textarea" required
-                     placeholder="What similar solutions exist?"></textarea>
-            <span class="tooltip-icon">👁️
+                     data-ui-key="What similar solutions exist?"
+                     placeholder="What other solutions are out there and how is yours different?"></textarea>
+            <span class="tooltip-icon">🔍
               <span class="tooltip-text">
-                What similar products or solutions already exist? How is yours different?
+                What competition exists? Don't worry - competition can be good! It means people want solutions.
               </span>
             </span>
           </div>
-          <div id="alternatives-count" class="word-counter">0 words (5-200)</div>
+          <div id="alternatives-count" class="word-counter">0 words • Start typing!</div>
         </div>
 
         <!-- Category (Multi-select) -->
         <div class="form-group">
-          <label class="form-label" data-tooltip-key="category">
-            Categories <span class="optional"> | Hold CTRL to select multiple categories!</span>
+          <label class="form-label" data-tooltip-key="Categories">
+            <span data-ui-key="Categories">Categories</span> 
+            <span class="optional" data-ui-key="Hold CTRL to select multiple categories!"> | Hold CTRL to pick multiple!</span>
           </label>
           <select id="category" name="category" class="form-select" multiple>
             <option value="Technology">Technology</option>
@@ -165,10 +170,11 @@
         <!-- Heard About -->
         <div class="form-group">
           <label class="form-label" data-tooltip-key="heard_about">
-            How did you hear about Capsera? <span class="optional">(Optional)</span>
+            <span data-ui-key="How did you hear about Capsera?">How did you hear about Capsera?</span>
+            <span class="optional" data-ui-key="Optional">(Optional)</span>
           </label>
           <select id="heard_about" name="heard_about" class="form-select">
-            <option value="">Select...</option>
+            <option value="" data-ui-key="Select...">Select...</option>
             <option value="Social Media">Social Media</option>
             <option value="Friend/Family">Friend/Family</option>
             <option value="Search Engine">Search Engine</option>
@@ -180,7 +186,7 @@
         </div>
 
         <button type="submit" class="btn btn-primary" data-ui-key="Submit">
-          Submit Idea
+          Share Your Idea!
         </button>
       </form>
     </div>
@@ -191,7 +197,8 @@
 
       <!-- Language Selection -->
       <div class="settings-section">
-        <h3 data-ui-key="Choose language">Choose Language</h3>
+        <h3 data-ui-key="Choose language">Choose Your Language</h3>
+        <p>Pick the language that feels most comfortable for you!</p>
         <div id="language-selector" class="language-selector">
           <!-- Language options populated by JS -->
         </div>
@@ -199,7 +206,8 @@
 
       <!-- Users Management -->
       <div class="settings-section">
-        <h3>Users</h3>
+        <h3>Your Profiles</h3>
+        <p>Manage the different user profiles you've created</p>
         <div id="users-list">
           <div class="loading" data-ui-key="Loading...">Loading...</div>
         </div>
@@ -207,7 +215,7 @@
     </div>
   </div>
 
-  <!-- Modal Overlay Template (Created dynamically) -->
+  <!-- Enhanced Modal Styles for better UX -->
   <style>
     .modal-overlay {
       position: fixed;
@@ -215,21 +223,40 @@
       left: 0;
       width: 100%;
       height: 100%;
-      background: rgba(0, 0, 0, 0.5);
+      background: rgba(0, 0, 0, 0.6);
       display: flex;
       justify-content: center;
       align-items: center;
       z-index: 1000;
+      animation: fadeIn 0.3s ease-out;
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; }
+      to { opacity: 1; }
     }
 
     .modal-content {
       background: white;
       padding: 4%;
-      border-radius: 8px;
+      border-radius: 12px;
       max-width: 90%;
       max-height: 90%;
       overflow-y: auto;
       position: relative;
+      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.2);
+      animation: slideUp 0.3s ease-out;
+    }
+
+    @keyframes slideUp {
+      from { 
+        opacity: 0; 
+        transform: translateY(30px) scale(0.95); 
+      }
+      to { 
+        opacity: 1; 
+        transform: translateY(0) scale(1); 
+      }
     }
 
     .modal-header {
@@ -238,120 +265,197 @@
       align-items: center;
       margin-bottom: 3%;
       padding-bottom: 2%;
-      border-bottom: 1px solid var(--capsera-border);
+      border-bottom: 2px solid var(--capsera-border);
     }
 
     .modal-header h3 {
       margin: 0;
       color: var(--capsera-deep);
+      font-size: 1.4rem;
     }
 
     .modal-header button {
       background: none;
       border: none;
-      font-size: 1.5rem;
+      font-size: 1.8rem;
       cursor: pointer;
       color: var(--capsera-deep);
+      padding: 8px;
+      border-radius: 50%;
+      transition: all 0.2s ease;
+    }
+
+    .modal-header button:hover {
+      background: var(--capsera-light-gray);
+      color: var(--capsera-accent);
     }
 
     .modal-body {
       line-height: 1.6;
+      color: #555;
     }
 
-    .idea-details h4 {
+    /* Submissions Layout */
+    .submissions-layout {
+      display: grid;
+      grid-template-columns: 280px 1fr;
+      gap: 3%;
+      align-items: start;
+    }
+
+    @media (max-width: 1024px) {
+      .submissions-layout {
+        grid-template-columns: 1fr;
+        gap: 4%;
+      }
+    }
+
+    .submissions-sidebar {
+      position: sticky;
+      top: 20px;
+    }
+
+    .drafts-sidebar {
+      background: var(--capsera-light-gray);
+      padding: 3%;
+      border-radius: var(--capsera-radius);
+      box-shadow: var(--capsera-shadow);
+    }
+
+    .drafts-sidebar h4 {
       color: var(--capsera-deep);
-      margin-top: 3%;
+      margin-bottom: 3%;
+      font-size: 1.1rem;
+      text-align: center;
+    }
+
+    .drafts-list {
+      display: flex;
+      flex-direction: column;
+      gap: 2%;
+    }
+
+    .draft-item {
+      background: white;
+      padding: 3%;
+      border-radius: 6px;
+      cursor: pointer;
+      transition: var(--capsera-transition);
+      border-left: 3px solid transparent;
+    }
+
+    .draft-item:hover {
+      border-left-color: var(--capsera-accent);
+      transform: translateX(3px);
+      box-shadow: var(--capsera-shadow);
+    }
+
+    .draft-title {
+      font-weight: 600;
+      color: var(--capsera-deep);
+      font-size: 0.9rem;
       margin-bottom: 1%;
     }
 
-    .idea-details p {
-      margin-bottom: 2%;
+    .draft-meta {
+      font-size: 0.75rem;
+      color: #666;
+      margin-bottom: 1%;
     }
 
-    .feedback-section {
-      margin-top: 6%;
-      padding-top: 4%;
-      border-top: 2px solid var(--capsera-border);
+    .draft-date {
+      font-size: 0.7rem;
+      color: #999;
     }
 
-    .feedback-section h3 {
-      color: var(--capsera-deep);
-      margin-bottom: 3%;
-    }
-
-    .projects-overview {
+    .submissions-header {
       margin-bottom: 4%;
-      background: var(--capsera-light-gray);
       padding: 3%;
-      border-radius: 4px;
-    }
-
-    .project-overview {
-      background: white;
-      padding: 2%;
-      margin-bottom: 2%;
-      border-radius: 4px;
+      background: linear-gradient(135deg, rgba(249, 189, 69, 0.1), rgba(249, 189, 69, 0.05));
+      border-radius: var(--capsera-radius);
       border-left: 4px solid var(--capsera-accent);
     }
 
-    .project-header {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      margin-bottom: 1%;
-    }
-
-    .project-preview {
-      font-size: 0.9rem;
-      color: #666;
-    }
-
-    .status {
-      padding: 1% 2%;
-      border-radius: 12px;
-      font-size: 0.8rem;
-      font-weight: 500;
-    }
-
-    .status.success {
-      background: #e6ffe6;
-      color: var(--capsera-success);
-    }
-
-    .status.warning {
-      background: #fff7e6;
-      color: #856404;
-    }
-
-    .user-project-selection {
-      background: var(--capsera-light-gray);
-      padding: 4%;
-      border-radius: 8px;
-      margin-bottom: 4%;
-    }
-
-    .required {
-      color: var(--capsera-error);
-    }
-
-    .optional {
-      color: #666;
-      font-weight: normal;
-      font-size: 0.9rem;
-    }
-
-    .settings-section {
-      margin-bottom: 6%;
-    }
-
-    .settings-section h3 {
+    .submissions-header h3 {
       color: var(--capsera-deep);
+      margin-bottom: 1%;
+      font-size: 1.3rem;
+    }
+
+    .submissions-header p {
+      color: #666;
+      margin: 0;
+      font-size: 0.95rem;
+    }
+
+    .submission-divider {
+      border: none;
+      border-top: 2px solid var(--capsera-border);
+      margin: 3% 0;
+      opacity: 0.5;
+    }
+
+    .field-group {
       margin-bottom: 3%;
+    }
+
+    .field-group h6 {
+      color: var(--capsera-deep);
+      font-size: 1.05rem;
+      font-weight: 600;
+      margin-bottom: 1%;
+      border-bottom: 2px solid var(--capsera-accent);
+      padding-bottom: 0.5%;
+      display: inline-block;
+    }
+
+    .field-group p {
+      color: #555;
+      line-height: 1.6;
+      margin: 0;
+    }
+
+    .submission-status {
+      display: flex;
+      align-items: center;
+      gap: 2%;
+    }
+
+    .project-count {
+      font-size: 0.9rem;
+      font-weight: 400;
+      color: var(--capsera-accent);
+    }
+
+    /* Enhanced word counter styles */
+    .word-counter.good {
+      color: var(--capsera-success);
+      font-weight: 600;
+    }
+
+    .word-counter.under-limit {
+      color: var(--capsera-warning);
+      font-weight: 600;
+    }
+
+    .form-helper {
+      background: linear-gradient(135deg, rgba(249, 189, 69, 0.1), rgba(249, 189, 69, 0.05));
+      padding: 3%;
+      border-radius: var(--capsera-radius);
+      margin-bottom: 4%;
+      border-left: 4px solid var(--capsera-accent);
+    }
+
+    .form-helper p {
+      margin: 0;
+      color: var(--capsera-deep);
+      font-weight: 500;
+      text-align: center;
     }
 
     @media (min-width: 768px) {
       .modal-content {
-        max-width: 70%;
+        max-width: 75%;
         padding: 3%;
       }
       
@@ -364,7 +468,14 @@
 
     @media (min-width: 1024px) {
       .modal-content {
-        max-width: 60%;
+        max-width: 65%;
+      }
+    }
+
+    @media (max-width: 1024px) {
+      .submissions-sidebar {
+        position: relative;
+        top: auto;
       }
     }
   </style>
@@ -383,3 +494,5 @@
     console.log("Public environment configuration loaded");
   </script>
   <script type="module" src="app.js"></script>
+</body>
+</html>
