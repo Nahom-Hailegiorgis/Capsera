@@ -35,6 +35,45 @@ export const dbHelper = {
           userStore.createIndex("pin_hash", "pin_hash", { unique: false });
         }
 
+        // Add this to your initDB() method in db.js
+
+// In your initDB() method, make sure these object stores exist:
+
+// Users store for local user management with PIN
+if (!db.objectStoreNames.contains("users")) {
+  const usersStore = db.createObjectStore("users", { keyPath: "full_name" });
+  usersStore.createIndex("device_id", "device_id", { unique: false });
+}
+
+// Projects store for user projects
+if (!db.objectStoreNames.contains("projects")) {
+  const projectsStore = db.createObjectStore("projects", { keyPath: "id" });
+  projectsStore.createIndex("full_name", "full_name", { unique: false });
+  projectsStore.createIndex("device_id", "device_id", { unique: false });
+}
+
+// Make sure drafts store has the required indices
+if (db.objectStoreNames.contains("drafts")) {
+  const transaction = event.target.transaction;
+  const draftsStore = transaction.objectStore("drafts");
+  
+  // Check if index exists before creating
+  if (!draftsStore.indexNames.contains("full_name")) {
+    draftsStore.createIndex("full_name", "full_name", { unique: false });
+  }
+}
+
+// Make sure sync_queue store has the required indices
+if (db.objectStoreNames.contains("sync_queue")) {
+  const transaction = event.target.transaction;
+  const syncStore = transaction.objectStore("sync_queue");
+  
+  // Check if index exists before creating
+  if (!syncStore.indexNames.contains("full_name")) {
+    syncStore.createIndex("full_name", "full_name", { unique: false });
+  }
+}
+
         if (!db.objectStoreNames.contains("drafts")) {
           const draftStore = db.createObjectStore("drafts", {
             keyPath: "id",
