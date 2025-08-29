@@ -280,7 +280,7 @@ export const dbHelper = {
       request.onerror = () => reject(request.error);
     });
   },
-  
+
   async saveDraft(submission) {
     const db = await this.getDB();
     const transaction = db.transaction(["drafts"], "readwrite");
