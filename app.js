@@ -1416,6 +1416,93 @@ createModal(title, body, onConfirm) {
     }
   }
 
+  showAIFeedbackModal(feedback) {
+    const modal = document.createElement("div");
+    modal.className = "modal-overlay";
+
+    // Handle both old and new feedback formats for modal title
+    const score = feedback.overall_score || feedback.score;
+
+    modal.innerHTML = `
+      <div class="modal-content">
+        <div class="modal-header">
+          <h3>AI Analysis (Score: ${score}/100)</h3>
+          <button onclick="this.closest('.modal-overlay').remove()">×</button>
+        </div>
+        <div class="modal-body">
+          ${this.renderAIFeedback(feedback)}
+          <div class="modal-footer">
+            <button class="btn btn-primary" onclick="this.closest('.modal-overlay').remove()">
+              Close
+            </button>
+          </div>
+        </div>
+      </div>
+    `;
+
+    document.body.appendChild(modal);
+  }
+
+  // Screen 4: Settings - Enhanced language switching with loading
+  async loadSettingsScreen() {
+    this.renderLanguageSelector();
+    await this.loadUsersList();
+  }
+
+  renderLanguageSelector() {
+    const container = document.getElementById("language-selector");
+    if (!container) return;
+
+    const currentLang = translator.getCurrentLanguage();
+
+    const html = translator.supportedLangs
+      .map(
+        (lang) => `
+      <div class="language-option ${lang === currentLang ? "selected" : ""}" 
+           onclick="app.selectLanguage('${lang}')">
+        ${translator.getLanguageName(lang)}
+      </div>
+    `
+      )
+      .join("");
+
+    container.innerHTML = html;
+  }
+
+  async selectLanguage(lang) {
+    if (lang === this.currentLanguage) return;
+
+    // Show loading overlay
+    const loadingOverlay = document.createElement("div");
+    loadingOverlay.className = "modal-overlay";
+    loadingOverlay.innerHTML = `
+      <div class="modal-content">
+        <div class="modal-body">
+          <div class="loading">
+            <div class="loading-spinner"></div>
+            <p>Updating language... Please wait.</p>
+          </div>
+        </div>
+      </div>
+    `;
+    document.body.appendChild(loadingOverlay);
+
+    try {
+      if (translator.setCurrentLanguage(lang)) {
+        this.currentLanguage = lang;
+        this.translations = await translator.getTranslations(lang);
+        translator.applyTranslations(this.translations);
+        this.renderLanguageSelector();
+        this.showMessage("Language updated successfully", "success");
+      }
+    } catch (error) {
+      console.error("Language update failed:", error);
+      this.showMessage("Failed to update language", "error");
+    } finally {
+      loadingOverlay.remove();
+    }
+  }
+
   async syncOfflineData() {
     if (!this.isOnline) return;
 
