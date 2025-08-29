@@ -1087,16 +1087,6 @@ async showCreateUserModal() {
   }
 }
 
-  // Add form submission handler to the modal
-  const form = modal.querySelector('#create-user-form');
-  if (form) {
-    form.addEventListener('submit', (e) => {
-      e.preventDefault();
-      modal.querySelector('.modal-confirm').click();
-    });
-  }
-}
-
  async showCreateProjectModal() {
   if (!this.currentUser) {
     this.showMessage("Please select a user first", "error");
