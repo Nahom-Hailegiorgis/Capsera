@@ -269,18 +269,18 @@ export const dbHelper = {
     });
   },
 
-  // Fixed deleteUser method for the new app.js
- async deleteUser(fullName) {
+  async deleteUser(fullName) {
     const db = await this.getDB();
     const transaction = db.transaction(["users"], "readwrite");
     const store = transaction.objectStore("users");
-     return new Promise((resolve, reject) => {
+
+    return new Promise((resolve, reject) => {
       const request = store.delete(fullName);
       request.onsuccess = () => resolve(true);
       request.onerror = () => reject(request.error);
     });
   },
-
+  
   async saveDraft(submission) {
     const db = await this.getDB();
     const transaction = db.transaction(["drafts"], "readwrite");
