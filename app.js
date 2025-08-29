@@ -1,4 +1,4 @@
-// app.js - Enhanced with compact submission cards, draft sidebar, and conversational tone
+// NEW app.js - Enhanced with compact submission cards, draft sidebar, and conversational tone 
 import { dbHelper } from "./db.js";
 import { supabaseHelper } from "./supabase.js";
 import { validation } from "./validation.js";
@@ -519,33 +519,6 @@ class CapseraApp {
       container.innerHTML = '<div class="error">Oops! Couldn\'t load ideas right now.</div>';
     }
   }
-
-  async loadUserSelect() {
-  const userSelect = document.getElementById('user-select');
-  if (!userSelect) return;
-
-  const users = await dbHelper.getUsers();
-  
-  userSelect.innerHTML = `
-    <option value="" data-ui-key="Choose a user or create one">Choose a user or create one</option>
-    ${users.map(user => `<option value="${this.escapeHtml(user)}">${this.escapeHtml(user)}</option>`).join('')}
-    <option value="__create_new__" data-ui-key="+ Create New User">+ Create New User</option>
-  `;
-
-  // Remove any existing event listeners to prevent duplicates
-  const newUserSelect = userSelect.cloneNode(true);
-  userSelect.parentNode.replaceChild(newUserSelect, userSelect);
-
-  newUserSelect.addEventListener('change', async (e) => {
-    if (e.target.value === '__create_new__') {
-      await this.showCreateUserModal();
-      e.target.value = ''; // Reset the dropdown after creation
-    } else {
-      this.currentUser = e.target.value;
-      await this.loadProjectSelect();
-    }
-  });
-}
 
   renderIdeasList() {
     const container = document.getElementById("ideas-list");
