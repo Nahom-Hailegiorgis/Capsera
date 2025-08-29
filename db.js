@@ -211,6 +211,134 @@ async deleteUserWithProjects(fullName) {
   });
 },
 
+  // Add these methods to your db.js file
+
+// Get all users for the current device
+async getUsers() {
+  const db = await this.getDB();
+  const transaction = db.transaction(["users"], "readonly");
+  const store = transaction.objectStore("users");
+  
+  return new Promise((resolve, reject) => {
+    const request = store.getAll();
+    request.onsuccess = () => {
+      const users = request.result || [];
+      // Return just the user names
+      resolve(users.map(user => user.full_name));
+    };
+    request.onerror = () => reject(request.error);
+  });
+},
+
+// Create a new user with PIN (local storage)
+async createUser(fullName, pin) {
+  const db = await this.getDB();
+  const transaction = db.transaction(["users"], "readwrite");
+  const store = transaction.objectStore("users");
+  
+  // Hash the PIN for security
+  const hashedPin = await this.hashPin(pin);
+  
+  const userData = {
+    full_name: fullName,
+    pin_hash: hashedPin,
+    device_id: this.getDeviceId(),
+    created_at: new Date().toISOString()
+  };
+
+  return new Promise((resolve, reject) => {
+    const request = store.put(userData);
+    request.onsuccess = () => resolve(userData);
+    request.onerror = () => {
+      if (request.error.name === 'ConstraintError') {
+        reject(new Error('User already exists'));
+      } else {
+        reject(request.error);
+      }
+    };
+  });
+},
+
+// Validate user PIN
+async validateUserPin(fullName, pin) {
+  const db = await this.getDB();
+  const transaction = db.transaction(["users"], "readonly");
+  const store = transaction.objectStore("users");
+  
+  return new Promise((resolve, reject) => {
+    const request = store.get(fullName);
+    request.onsuccess = async () => {
+      const user = request.result;
+      if (!user) {
+        resolve(false);
+        return;
+      }
+      
+      try {
+        const hashedPin = await this.hashPin(pin);
+        resolve(user.pin_hash === hashedPin);
+      } catch (error) {
+        reject(error);
+      }
+    };
+    request.onerror = () => reject(request.error);
+  });
+},
+
+// Get projects for a specific user
+async getProjectsByUser(userName) {
+  const db = await this.getDB();
+  const transaction = db.transaction(["projects"], "readonly");
+  const store = transaction.objectStore("projects");
+  const index = store.index("full_name");
+  
+  return new Promise((resolve, reject) => {
+    const request = index.getAll(userName);
+    request.onsuccess = () => {
+      const projects = request.result || [];
+      // Return just the project names
+      resolve(projects.map(project => project.project_name));
+    };
+    request.onerror = () => reject(request.error);
+  });
+},
+
+// Create a new project for a user
+async createProject(userName, projectName) {
+  const db = await this.getDB();
+  const transaction = db.transaction(["projects"], "readwrite");
+  const store = transaction.objectStore("projects");
+  
+  const projectData = {
+    id: `${userName}-${projectName}`,
+    full_name: userName,
+    project_name: projectName,
+    device_id: this.getDeviceId(),
+    created_at: new Date().toISOString()
+  };
+
+  return new Promise((resolve, reject) => {
+    const request = store.put(projectData);
+    request.onsuccess = () => resolve(projectData);
+    request.onerror = () => {
+      if (request.error.name === 'ConstraintError') {
+        reject(new Error('Project already exists'));
+      } else {
+        reject(request.error);
+      }
+    };
+  });
+},
+
+// Simple PIN hashing function
+async hashPin(pin) {
+  const encoder = new TextEncoder();
+  const data = encoder.encode(pin + this.getDeviceId()); // Salt with device ID
+  const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+  const hashArray = Array.from(new Uint8Array(hashBuffer));
+  return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+},
+
   // Save feedback locally (for offline support)
   async saveFeedback(feedbackData) {
     const db = await this.getDB();
