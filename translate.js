@@ -24,6 +24,19 @@ export const translator = {
     "My Submissions": "My Submissions",
     "Submit Ideas": "Submit Ideas",
     Settings: "Settings",
+    "Choose a user or create one": "Choose a user or create one",
+  "+ Create New User": "+ Create New User",
+  "Choose a project or create one": "Choose a project or create one", 
+  "+ Create New Project": "+ Create New Project",
+  "Select...": "Select...",
+  "Please enter your name": "Please enter your name",
+  "Please enter a project name": "Please enter a project name",
+  "Cancel": "Cancel",
+  "Confirm": "Confirm",
+  
+  // Also ensure these conversational ones are included:
+  "Enter your name": "Enter your name",
+  "My Amazing Project": "My Amazing Project",
 
     // Form elements
     Submit: "Submit",
