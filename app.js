@@ -939,50 +939,58 @@ class CapseraApp {
     this.setupWordCounters();
   }
 
-  async loadUserSelect() {
-    const userSelect = document.getElementById('user-select');
-    if (!userSelect) return;
+ async loadUserSelect() {
+  const userSelect = document.getElementById('user-select');
+  if (!userSelect) return;
 
-    const users = await dbHelper.getUsers();
-    
-    userSelect.innerHTML = `
-      <option value="" data-ui-key="Choose a user or create one">Choose a user or create one</option>
-      ${users.map(user => `<option value="${this.escapeHtml(user)}">${this.escapeHtml(user)}</option>`).join('')}
-      <option value="__create_new__" data-ui-key="+ Create New User">+ Create New User</option>
-    `;
+  const users = await dbHelper.getUsers();
+  
+  userSelect.innerHTML = `
+    <option value="" data-ui-key="Choose a user or create one">Choose a user or create one</option>
+    ${users.map(user => `<option value="${this.escapeHtml(user)}">${this.escapeHtml(user)}</option>`).join('')}
+    <option value="__create_new__" data-ui-key="+ Create New User">+ Create New User</option>
+  `;
 
-    userSelect.addEventListener('change', async (e) => {
-      if (e.target.value === '__create_new__') {
-        await this.showCreateUserModal();
-        e.target.value = '';
-      } else {
-        this.currentUser = e.target.value;
-        await this.loadProjectSelect();
-      }
-    });
-  }
+  // Remove existing event listener to prevent duplicates
+  const newUserSelect = userSelect.cloneNode(true);
+  userSelect.parentNode.replaceChild(newUserSelect, userSelect);
 
-  async loadProjectSelect() {
-    const projectSelect = document.getElementById('project-select');
-    if (!projectSelect || !this.currentUser) return;
+  newUserSelect.addEventListener('change', async (e) => {
+    if (e.target.value === '__create_new__') {
+      await this.showCreateUserModal();
+      e.target.value = '';
+    } else {
+      this.currentUser = e.target.value;
+      await this.loadProjectSelect();
+    }
+  });
+}
 
-    const projects = await dbHelper.getProjectsByUser(this.currentUser);
-    
-    projectSelect.innerHTML = `
-      <option value="" data-ui-key="Choose a project or create one">Choose a project or create one</option>
-      ${projects.map(project => `<option value="${this.escapeHtml(project)}">${this.escapeHtml(project)}</option>`).join('')}
-      <option value="__create_new__" data-ui-key="+ Create New Project">+ Create New Project</option>
-    `;
+ async loadProjectSelect() {
+  const projectSelect = document.getElementById('project-select');
+  if (!projectSelect || !this.currentUser) return;
 
-    projectSelect.addEventListener('change', async (e) => {
-      if (e.target.value === '__create_new__') {
-        await this.showCreateProjectModal();
-        e.target.value = '';
-      } else {
-        this.currentProject = e.target.value;
-      }
-    });
-  }
+  const projects = await dbHelper.getProjectsByUser(this.currentUser);
+  
+  projectSelect.innerHTML = `
+    <option value="" data-ui-key="Choose a project or create one">Choose a project or create one</option>
+    ${projects.map(project => `<option value="${this.escapeHtml(project)}">${this.escapeHtml(project)}</option>`).join('')}
+    <option value="__create_new__" data-ui-key="+ Create New Project">+ Create New Project</option>
+  `;
+
+  // Remove existing event listener to prevent duplicates
+  const newProjectSelect = projectSelect.cloneNode(true);
+  projectSelect.parentNode.replaceChild(newProjectSelect, projectSelect);
+
+  newProjectSelect.addEventListener('change', async (e) => {
+    if (e.target.value === '__create_new__') {
+      await this.showCreateProjectModal();
+      e.target.value = '';
+    } else {
+      this.currentProject = e.target.value;
+    }
+  });
+}
 
   async showCreateUserModal() {
     const modal = this.createModal(
