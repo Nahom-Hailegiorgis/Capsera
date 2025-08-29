@@ -1,4 +1,3 @@
-
 // NEW app.js - Enhanced with compact submission cards, draft sidebar, and conversational tone 
 import { dbHelper } from "./db.js";
 import { supabaseHelper } from "./supabase.js";
