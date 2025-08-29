@@ -132,7 +132,84 @@ export const dbHelper = {
     });
   },
 
-  // Add these methods to your db.js dbHelper object
+  // Add this method to your db.js file
+async deleteUserWithProjects(fullName) {
+  const db = await this.getDB();
+  
+  // Start a transaction that covers all stores we need to modify
+  const transaction = db.transaction(["users", "projects", "drafts", "sync_queue"], "readwrite");
+  const usersStore = transaction.objectStore("users");
+  const projectsStore = transaction.objectStore("projects");
+  const draftsStore = transaction.objectStore("drafts");
+  const syncQueueStore = transaction.objectStore("sync_queue");
+
+  return new Promise((resolve, reject) => {
+    let operationsComplete = 0;
+    const totalOperations = 4; // users, projects, drafts, sync_queue
+    
+    const checkComplete = () => {
+      operationsComplete++;
+      if (operationsComplete === totalOperations) {
+        resolve(true);
+      }
+    };
+
+    const handleError = (error) => {
+      console.error("Error in deleteUserWithProjects:", error);
+      reject(error);
+    };
+
+    // 1. Delete user
+    const deleteUserRequest = usersStore.delete(fullName);
+    deleteUserRequest.onsuccess = checkComplete;
+    deleteUserRequest.onerror = () => handleError(deleteUserRequest.error);
+
+    // 2. Delete all projects for this user
+    const projectsIndex = projectsStore.index("full_name");
+    const projectsRequest = projectsIndex.openCursor(IDBKeyRange.only(fullName));
+    
+    projectsRequest.onsuccess = (event) => {
+      const cursor = event.target.result;
+      if (cursor) {
+        cursor.delete();
+        cursor.continue();
+      } else {
+        checkComplete();
+      }
+    };
+    projectsRequest.onerror = () => handleError(projectsRequest.error);
+
+    // 3. Delete all drafts for this user
+    const draftsIndex = draftsStore.index("full_name");
+    const draftsRequest = draftsIndex.openCursor(IDBKeyRange.only(fullName));
+    
+    draftsRequest.onsuccess = (event) => {
+      const cursor = event.target.result;
+      if (cursor) {
+        cursor.delete();
+        cursor.continue();
+      } else {
+        checkComplete();
+      }
+    };
+    draftsRequest.onerror = () => handleError(draftsRequest.error);
+
+    // 4. Delete all sync queue entries for this user
+    const syncIndex = syncQueueStore.index("full_name");
+    const syncRequest = syncIndex.openCursor(IDBKeyRange.only(fullName));
+    
+    syncRequest.onsuccess = (event) => {
+      const cursor = event.target.result;
+      if (cursor) {
+        cursor.delete();
+        cursor.continue();
+      } else {
+        checkComplete();
+      }
+    };
+    syncRequest.onerror = () => handleError(syncRequest.error);
+  });
+}
 
   // Save feedback locally (for offline support)
   async saveFeedback(feedbackData) {
