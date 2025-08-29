@@ -316,6 +316,41 @@ export const dbHelper = {
     });
   },
 
+  async isDraftPlaceholder(draft) {
+  if (!draft) return true;
+  
+  const fields = [
+    draft.ideal_customer_profile,
+    draft.product_idea, 
+    draft.pain_points,
+    draft.alternatives
+  ];
+  
+  // Check if all fields are empty, null, or contain "Not specified"
+  const hasRealContent = fields.some(field => {
+    if (!field) return false;
+    const trimmed = field.trim();
+    return trimmed.length > 0 && !trimmed.includes('Not specified');
+  });
+  
+  // Also check if version is 1 and it's the auto-generated first draft
+  const isEmptyFirstDraft = draft.version === 1 && !hasRealContent;
+  
+  return !hasRealContent || isEmptyFirstDraft;
+},
+
+  async removeFromSyncQueue(key) {
+    const db = await this.getDB();
+    const transaction = db.transaction(["sync_queue"], "readwrite");
+    const store = transaction.objectStore("sync_queue");
+
+    return new Promise((resolve, reject) => {
+      const request = store.delete(key);
+      request.onsuccess = () => resolve(true);
+      request.onerror = () => reject(request.error);
+    });
+  },
+
   async getDraftsByUserAndProject(fullName, projectName) {
     const db = await this.getDB();
     const transaction = db.transaction(["drafts"], "readonly");
