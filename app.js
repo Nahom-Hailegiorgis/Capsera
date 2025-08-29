@@ -1016,7 +1016,6 @@ async loadProjectSelect() {
 
 
  
-// Reverted showCreateUserModal method - separate user creation
 // Fixed showCreateUserModal method for the new app.js
 async showCreateUserModal() {
   const modal = this.createModal(
@@ -1056,8 +1055,15 @@ async showCreateUserModal() {
       }
 
       try {
+        // Check if user already exists
+        const existingUsers = await dbHelper.getUsers();
+        if (existingUsers.includes(name)) {
+          this.showMessage("A user with this name already exists", "error");
+          return false;
+        }
+
         await dbHelper.createUser(name, pin);
-        this.showMessage("User created successfully", "success");
+        this.showMessage("User created successfully!", "success");
         
         // Reload user dropdown to include new user
         await this.loadUserSelect();
@@ -1065,11 +1071,21 @@ async showCreateUserModal() {
         return true;
       } catch (error) {
         console.error("Error creating user:", error);
-        this.showMessage("Failed to create user", "error");
+        this.showMessage("Failed to create user. Please try again.", "error");
         return false;
       }
     }
   );
+
+  // Add form submission handler to the modal
+  const form = modal.querySelector('#create-user-form');
+  if (form) {
+    form.addEventListener('submit', (e) => {
+      e.preventDefault();
+      modal.querySelector('.modal-confirm').click();
+    });
+  }
+}
 
   // Add form submission handler to the modal
   const form = modal.querySelector('#create-user-form');
