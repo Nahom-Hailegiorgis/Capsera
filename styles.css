@@ -244,11 +244,12 @@ body {
   color: var(--capsera-text);
   transition: var(--capsera-transition);
   box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.02);
+  resize: none; /* Disable manual resize for textareas */
+  overflow: hidden; /* Hide scrollbars during auto-resize */
 }
 
 .form-textarea {
-  min-height: 100px;
-  resize: vertical;
+  min-height: 60px; /* Smaller initial height */
   line-height: 1.5;
 }
 
@@ -573,9 +574,196 @@ body {
   color: #495057;
 }
 
+/* COMPACT SUBMISSION CARDS WITH TOGGLE */
+.submission-card {
+  background: white;
+  border: 2px solid var(--capsera-border);
+  border-radius: var(--capsera-radius);
+  margin-bottom: 1.5%;
+  overflow: hidden;
+  box-shadow: var(--capsera-shadow);
+  transition: var(--capsera-transition);
+}
+
+.submission-card:hover {
+  border-color: var(--capsera-accent);
+  box-shadow: var(--capsera-shadow-hover);
+}
+
+.submission-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 2%;
+  background: var(--capsera-light-gray);
+  cursor: pointer;
+  border-bottom: 1px solid var(--capsera-border);
+}
+
+.submission-card-title {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5%;
+}
+
+.submission-card-main-title {
+  font-weight: 700;
+  color: var(--capsera-deep);
+  font-size: 1rem;
+}
+
+.submission-card-meta {
+  font-size: 0.8rem;
+  color: #6c757d;
+  display: flex;
+  gap: 1%;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.submission-card-chevron {
+  font-size: 1.2rem;
+  color: var(--capsera-accent);
+  transition: var(--capsera-transition);
+  cursor: pointer;
+  padding: 0.5%;
+  border-radius: 50%;
+}
+
+.submission-card-chevron:hover {
+  background: rgba(249, 189, 69, 0.1);
+}
+
+.submission-card--expanded .submission-card-chevron {
+  transform: rotate(180deg);
+}
+
+.submission-card-content {
+  max-height: 0;
+  overflow: hidden;
+  transition: max-height 0.3s ease;
+}
+
+.submission-card--expanded .submission-card-content {
+  max-height: 1000px;
+}
+
+.submission-card-body {
+  padding: 3%;
+}
+
+/* SIDEBAR FOR DRAFT HISTORY */
+.draft-sidebar {
+  position: fixed;
+  top: 0;
+  right: -400px;
+  width: 400px;
+  height: 100vh;
+  background: white;
+  box-shadow: -4px 0 16px rgba(0, 0, 0, 0.1);
+  transition: right 0.3s ease;
+  z-index: 1000;
+  display: flex;
+  flex-direction: column;
+}
+
+.draft-sidebar.open {
+  right: 0;
+}
+
+.draft-sidebar-header {
+  padding: 3%;
+  border-bottom: 2px solid var(--capsera-border);
+  background: var(--capsera-light-gray);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.draft-sidebar-header h3 {
+  color: var(--capsera-deep);
+  margin: 0;
+  font-weight: 600;
+}
+
+.draft-sidebar-close {
+  background: none;
+  border: none;
+  font-size: 1.5rem;
+  cursor: pointer;
+  color: #6c757d;
+  padding: 0.5%;
+  border-radius: 50%;
+  transition: var(--capsera-transition);
+}
+
+.draft-sidebar-close:hover {
+  background: rgba(220, 53, 69, 0.1);
+  color: var(--capsera-error);
+}
+
+.draft-sidebar-content {
+  flex: 1;
+  overflow-y: auto;
+  padding: 3%;
+}
+
+.draft-item {
+  padding: 3%;
+  border: 2px solid var(--capsera-border);
+  border-radius: var(--capsera-radius);
+  margin-bottom: 2%;
+  cursor: pointer;
+  transition: var(--capsera-transition);
+}
+
+.draft-item:hover {
+  border-color: var(--capsera-accent);
+  background: rgba(249, 189, 69, 0.05);
+}
+
+.draft-item.active {
+  border-color: var(--capsera-accent);
+  background: rgba(249, 189, 69, 0.1);
+}
+
+.draft-item-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1%;
+}
+
+.draft-version {
+  font-weight: 700;
+  color: var(--capsera-deep);
+}
+
+.draft-date {
+  font-size: 0.8rem;
+  color: #6c757d;
+}
+
+.draft-preview {
+  font-size: 0.85rem;
+  color: #495057;
+  line-height: 1.4;
+  max-height: 60px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+@media (max-width: 768px) {
+  .draft-sidebar {
+    width: 100%;
+    right: -100%;
+  }
+}
+
 /* Compact User Sections */
 .user-section {
-  margin-bottom: 4%;
+  margin-bottom: 2%;
   border: 2px solid var(--capsera-border);
   border-radius: var(--capsera-radius);
   overflow: hidden;
@@ -586,10 +774,10 @@ body {
 .user-header {
   background: linear-gradient(135deg, var(--capsera-deep) 0%, #1a4d72 100%);
   color: white;
-  padding: 3%;
+  padding: 2%;
   margin: 0;
   font-weight: 700;
-  font-size: 1.1rem;
+  font-size: 1rem;
   position: relative;
 }
 
@@ -604,26 +792,26 @@ body {
 }
 
 .user-submissions {
-  padding: 3%;
+  padding: 2%;
 }
 
 .projects-overview {
   background: linear-gradient(135deg, rgba(249, 189, 69, 0.05) 0%, rgba(249, 189, 69, 0.02) 100%);
-  padding: 3%;
+  padding: 2%;
   border-bottom: 1px solid var(--capsera-border);
 }
 
 .projects-overview h4 {
   color: var(--capsera-deep);
-  margin-bottom: 3%;
-  font-size: 1.1rem;
+  margin-bottom: 2%;
+  font-size: 1rem;
   font-weight: 600;
 }
 
 .project-overview {
   background: white;
-  padding: 3%;
-  margin-bottom: 2%;
+  padding: 2%;
+  margin-bottom: 1.5%;
   border-radius: var(--capsera-radius);
   border-left: 4px solid var(--capsera-accent);
   box-shadow: var(--capsera-shadow);
@@ -639,7 +827,7 @@ body {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 2%;
+  margin-bottom: 1%;
   flex-wrap: wrap;
   gap: 2%;
 }
@@ -705,8 +893,8 @@ body {
 .ai-feedback h5 {
   color: var(--capsera-deep);
   margin-bottom: 3%;
-  font-size: 1rem;
-  font-weight: 600;
+  font-size: 1.2rem; /* Increased from 1rem */
+  font-weight: 700; /* Increased from 600 */
   display: flex;
   align-items: center;
   gap: 8px;
@@ -714,7 +902,7 @@ body {
 
 .ai-feedback h5::before {
   content: '🤖';
-  font-size: 1.2rem;
+  font-size: 1.4rem; /* Increased from 1.2rem */
 }
 
 .feedback-sections {
@@ -743,8 +931,8 @@ body {
 
 .feedback-section h6 {
   color: var(--capsera-deep);
-  font-size: 0.9rem;
-  font-weight: 600;
+  font-size: 1.1rem; /* Increased from 0.9rem */
+  font-weight: 700; /* Increased from 600 */
   margin-bottom: 2%;
   text-transform: capitalize;
   border-bottom: 2px solid var(--capsera-accent);
@@ -760,6 +948,7 @@ body {
   margin-bottom: 1%;
   line-height: 1.5;
   position: relative;
+  font-size: 0.9rem; /* Smaller than subtitles */
 }
 
 .feedback-section li::marker {
@@ -1068,6 +1257,11 @@ body {
   border-top: 1px solid var(--capsera-border);
   text-align: right;
   background: var(--capsera-light-gray);
+}
+
+/* Hide placeholder drafts */
+.draft-placeholder {
+  display: none !important;
 }
 
 /* Utility Classes */
