@@ -269,17 +269,58 @@ export const dbHelper = {
     });
   },
 
-  async deleteUser(fullName) {
-    const db = await this.getDB();
-    const transaction = db.transaction(["users"], "readwrite");
-    const store = transaction.objectStore("users");
+  // Fixed deleteUser method for the new app.js
+async deleteUser(userName) {
+  const pin = prompt(`Enter your 4-digit PIN to delete ${userName}:`);
+  
+  if (!pin || pin.length !== 4 || !/^\d{4}$/.test(pin)) {
+    this.showMessage("PIN must be exactly 4 digits", "error");
+    return;
+  }
 
-    return new Promise((resolve, reject) => {
-      const request = store.delete(fullName);
-      request.onsuccess = () => resolve(true);
-      request.onerror = () => reject(request.error);
-    });
-  },
+  try {
+    const isValidPin = await dbHelper.validateUserPin(userName, pin);
+    
+    if (!isValidPin) {
+      this.showMessage("Invalid PIN - please try again", "error");
+      return;
+    }
+
+    // Delete all projects associated with this user first
+    const userProjects = await dbHelper.getProjectsByUser(userName);
+    for (const project of userProjects) {
+      await dbHelper.deleteProject(userName, project);
+    }
+    
+    // Delete all drafts/submissions associated with this user
+    const userDrafts = await dbHelper.getDraftsByUser(userName);
+    for (const draft of userDrafts) {
+      await dbHelper.deleteDraft(draft.id);
+    }
+
+    // Finally delete the user
+    await dbHelper.deleteUser(userName);
+    
+    this.showMessage("User and all associated data deleted successfully", "success");
+    
+    // Refresh users list
+    await this.loadUsersManagement();
+    
+    // Clear current user if it was deleted
+    if (this.currentUser === userName) {
+      this.currentUser = null;
+      this.currentProject = null;
+      const userSelect = document.getElementById('user-select');
+      if (userSelect) userSelect.value = '';
+      const projectSelect = document.getElementById('project-select');
+      if (projectSelect) projectSelect.value = '';
+    }
+    
+  } catch (error) {
+    console.error("Delete user error:", error);
+    this.showMessage("Failed to delete user - please try again", "error");
+  }
+}
 
   async saveDraft(submission) {
     const db = await this.getDB();
