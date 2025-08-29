@@ -209,7 +209,7 @@ async deleteUserWithProjects(fullName) {
     };
     syncRequest.onerror = () => handleError(syncRequest.error);
   });
-}
+},
 
   // Save feedback locally (for offline support)
   async saveFeedback(feedbackData) {
