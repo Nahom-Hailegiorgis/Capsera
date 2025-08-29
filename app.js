@@ -924,43 +924,43 @@ class CapseraApp {
   }
 
   // Screen 3: Enhanced Submit Ideas with conversational tone
-  async loadSubmitScreen() {
-    // Load user and project dropdowns
-    await this.loadUserSelect();
-    await this.loadProjectSelect();
-    
-    // Setup form submission
-    this.setupSubmitForm();
-    
-    // Setup textarea autosize
-    this.setupTextareaAutosize();
-    
-    // Setup word counters
-    this.setupWordCounters();
-  }
+ async loadSubmitScreen() {
+  // Load user and project dropdowns
+  await this.loadUserSelect();
+  await this.loadProjectSelect();
+  
+  // Setup form submission
+  this.setupSubmitForm();
+  
+  // Setup textarea autosize
+  this.setupTextareaAutosize();
+  
+  // Setup word counters
+  this.setupWordCounters();
+}
+  
+async loadUserSelect() {
+  const userSelect = document.getElementById('user-select');
+  if (!userSelect) return;
 
-  async loadUserSelect() {
-    const userSelect = document.getElementById('user-select');
-    if (!userSelect) return;
+  const users = await dbHelper.getUsers();
+  
+  userSelect.innerHTML = `
+    <option value="" data-ui-key="Choose a user or create one">Choose a user or create one</option>
+    ${users.map(user => `<option value="${this.escapeHtml(user)}">${this.escapeHtml(user)}</option>`).join('')}
+    <option value="__create_new__" data-ui-key="+ Create New User">+ Create New User</option>
+  `;
 
-    const users = await dbHelper.getUsers();
-    
-    userSelect.innerHTML = `
-      <option value="" data-ui-key="Choose a user or create one">Choose a user or create one</option>
-      ${users.map(user => `<option value="${this.escapeHtml(user)}">${this.escapeHtml(user)}</option>`).join('')}
-      <option value="__create_new__" data-ui-key="+ Create New User">+ Create New User</option>
-    `;
-
-    userSelect.addEventListener('change', async (e) => {
-      if (e.target.value === '__create_new__') {
-        await this.showCreateUserModal();
-        e.target.value = '';
-      } else {
-        this.currentUser = e.target.value;
-        await this.loadProjectSelect();
-      }
-    });
-  }
+  userSelect.addEventListener('change', async (e) => {
+    if (e.target.value === '__create_new__') {
+      await this.showCreateUserModal();
+      e.target.value = '';
+    } else {
+      this.currentUser = e.target.value;
+      await this.loadProjectSelect();
+    }
+  });
+}
 
   async loadProjectSelect() {
     const projectSelect = document.getElementById('project-select');
@@ -984,47 +984,47 @@ class CapseraApp {
     });
   }
 
-  async showCreateUserModal() {
-    const modal = this.createModal(
-      'Create New User',
-      `
-        <div class="form-group">
-          <label class="form-label" data-ui-key="Hey! What should we call you?">Hey! What should we call you?</label>
-          <input type="text" id="new-user-name" class="form-input" placeholder="Enter your name" required>
-        </div>
-        <div class="form-group">
-          <label class="form-label" data-ui-key="Create a 4-digit PIN to keep your account safe:">Create a 4-digit PIN to keep your account safe:</label>
-          <input type="number" id="new-user-pin" class="form-input" placeholder="1234" min="1000" max="9999" required>
-        </div>
-      `,
-      async () => {
-        const name = document.getElementById('new-user-name').value.trim();
-        const pin = document.getElementById('new-user-pin').value.trim();
+async showCreateUserModal() {
+  const modal = this.createModal(
+    'Create New User',
+    `
+      <div class="form-group">
+        <label class="form-label" data-ui-key="Hey! What should we call you?">Hey! What should we call you?</label>
+        <input type="text" id="new-user-name" class="form-input" placeholder="Enter your name" required>
+      </div>
+      <div class="form-group">
+        <label class="form-label" data-ui-key="Create a 4-digit PIN to keep your account safe:">Create a 4-digit PIN to keep your account safe:</label>
+        <input type="number" id="new-user-pin" class="form-input" placeholder="1234" min="1000" max="9999" required>
+      </div>
+    `,
+    async () => {
+      const name = document.getElementById('new-user-name').value.trim();
+      const pin = document.getElementById('new-user-pin').value.trim();
 
-        if (!name) {
-          this.showMessage("Please enter your name", "error");
-          return false;
-        }
-
-        if (pin.length !== 4 || !/^\d{4}$/.test(pin)) {
-          this.showMessage("PIN must be exactly 4 digits", "error");
-          return false;
-        }
-
-        await dbHelper.createUser(name, pin);
-        this.currentUser = name;
-        
-        const userSelect = document.getElementById('user-select');
-        if (userSelect) {
-          await this.loadUserSelect();
-          userSelect.value = name;
-        }
-        
-        this.showMessage("Welcome! Your account is ready", "success");
-        return true;
+      if (!name) {
+        this.showMessage("Please enter your name", "error");
+        return false;
       }
-    );
-  }
+
+      if (pin.length !== 4 || !/^\d{4}$/.test(pin)) {
+        this.showMessage("PIN must be exactly 4 digits", "error");
+        return false;
+      }
+
+      await dbHelper.createUser(name, pin);
+      this.currentUser = name;
+      
+      const userSelect = document.getElementById('user-select');
+      if (userSelect) {
+        await this.loadUserSelect();
+        userSelect.value = name;
+      }
+      
+      this.showMessage("Welcome! Your account is ready", "success");
+      return true;
+    }
+  );
+}
 
   async showCreateProjectModal() {
     if (!this.currentUser) {
@@ -1232,38 +1232,38 @@ class CapseraApp {
 
   // Utility methods
   createModal(title, body, onConfirm) {
-    const overlay = document.createElement('div');
-    overlay.className = 'modal-overlay';
-    
-    overlay.innerHTML = `
-      <div class="modal-content">
-        <div class="modal-header">
-          <h3>${title}</h3>
-          <button onclick="this.closest('.modal-overlay').remove()">×</button>
-        </div>
-        <div class="modal-body">
-          ${body}
-        </div>
-        <div class="modal-footer">
-          <button class="btn btn-secondary" onclick="this.closest('.modal-overlay').remove()" data-ui-key="Cancel">Cancel</button>
-          <button class="btn btn-primary modal-confirm" data-ui-key="Confirm">Confirm</button>
-        </div>
+  const overlay = document.createElement('div');
+  overlay.className = 'modal-overlay';
+  
+  overlay.innerHTML = `
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3>${title}</h3>
+        <button onclick="this.closest('.modal-overlay').remove()">×</button>
       </div>
-    `;
-    
-    document.body.appendChild(overlay);
-    
-    if (onConfirm) {
-      overlay.querySelector('.modal-confirm').addEventListener('click', async () => {
-        const result = await onConfirm();
-        if (result !== false) {
-          overlay.remove();
-        }
-      });
-    }
-    
-    return overlay;
+      <div class="modal-body">
+        ${body}
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" onclick="this.closest('.modal-overlay').remove()" data-ui-key="Cancel">Cancel</button>
+        <button class="btn btn-primary modal-confirm" data-ui-key="Confirm">Confirm</button>
+      </div>
+    </div>
+  `;
+  
+  document.body.appendChild(overlay);
+  
+  if (onConfirm) {
+    overlay.querySelector('.modal-confirm').addEventListener('click', async () => {
+      const result = await onConfirm();
+      if (result !== false) {
+        overlay.remove();
+      }
+    });
   }
+  
+  return overlay;
+}
 
   clearForm() {
     const form = document.getElementById('submit-form');
