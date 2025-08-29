@@ -45,21 +45,21 @@
 
     <!-- Screen 3: Submit Ideas -->
     <div id="submit-screen" class="screen">
-      <h2 data-ui-key="Submit Ideas">Submit Ideas</h2>
+      <h2 data-ui-key="Submit Ideas">Share Your Idea</h2>
 
       <!-- User and Project Selection -->
       <div class="user-project-selection">
         <div class="form-group">
-          <label class="form-label">Select User</label>
+          <label class="form-label">Hey there! Who are you?</label>
           <select id="user-select" class="form-select" required>
-            <option value="">Select User</option>
+            <option value="">Pick your name</option>
           </select>
         </div>
         
         <div class="form-group">
-          <label class="form-label">Select Project</label>
+          <label class="form-label">Which project is this for?</label>
           <select id="project-select" class="form-select" required>
-            <option value="">Select Project</option>
+            <option value="">Choose a project</option>
           </select>
         </div>
       </div>
@@ -68,81 +68,81 @@
         <!-- Customer Profile -->
         <div class="form-group">
           <label class="form-label" data-ui-key="Required">
-            Ideal Customer Profile <span class="required">*</span>
+            Who would love this? <span class="required">*</span>
           </label>
-          <div class="input-with-icon" data-tooltip-key="ideal_customer_profile">
-            <textarea id="ideal_customer_profile" name="ideal_customer_profile" 
+          <div class="input-with-icon" data-tooltip-key="customer_profile">
+            <textarea id="customer_profile" name="customer_profile" 
                      class="form-textarea" required
-                     placeholder="Describe who would use your product..."></textarea>
+                     placeholder="Tell us about your ideal users — their age, job, daily struggles..."></textarea>
             <span class="tooltip-icon">👁️
               <span class="tooltip-text">
-                Describe who would use your product - their age, job, problems they face, etc.
+                Paint a picture of who would use your product — their demographics, pain points, and daily life
               </span>
             </span>
           </div>
-          <div id="ideal_customer_profile-count" class="word-counter">0 words (10-200)</div>
+          <div id="customer_profile-count" class="word-counter">0 words (10-200)</div>
         </div>
 
         <!-- Product Idea -->
         <div class="form-group">
           <label class="form-label" data-ui-key="Required">
-            Product Idea <span class="required">*</span>
+            What's your big idea? <span class="required">*</span>
           </label>
-          <div class="input-with-icon" data-tooltip-key="product_idea">
-            <textarea id="product_idea" name="product_idea" 
+          <div class="input-with-icon" data-tooltip-key="main_idea">
+            <textarea id="main_idea" name="main_idea" 
                      class="form-textarea" required
-                     placeholder="Explain your product idea..."></textarea>
+                     placeholder="Describe your product in simple terms — what does it do and why is it awesome?"></textarea>
             <span class="tooltip-icon">👁️
               <span class="tooltip-text">
-                Explain your product idea clearly - what does it do and how does it help people?
+                Explain your product clearly — what does it do and how does it make people's lives better?
               </span>
             </span>
           </div>
-          <div id="product_idea-count" class="word-counter">0 words (15-300)</div>
+          <div id="main_idea-count" class="word-counter">0 words (15-300)</div>
         </div>
 
         <!-- Pain Points -->
         <div class="form-group">
           <label class="form-label" data-ui-key="Required">
-            Pain Points <span class="required">*</span>
+            What problems does this solve? <span class="required">*</span>
           </label>
-          <div class="input-with-icon" data-tooltip-key="pain_points">
-            <textarea id="pain_points" name="pain_points" 
+          <div class="input-with-icon" data-tooltip-key="problems_solved">
+            <textarea id="problems_solved" name="problems_solved" 
                      class="form-textarea" required
-                     placeholder="What problems does this solve?"></textarea>
+                     placeholder="What frustrations or challenges will your product eliminate?"></textarea>
             <span class="tooltip-icon">👁️
               <span class="tooltip-text">
-                What specific problems or frustrations does your target customer experience?
+                What specific problems or frustrations does your target customer experience daily?
               </span>
             </span>
           </div>
-          <div id="pain_points-count" class="word-counter">0 words (15-250)</div>
+          <div id="problems_solved-count" class="word-counter">0 words (15-250)</div>
         </div>
 
         <!-- Alternatives -->
         <div class="form-group">
           <label class="form-label" data-ui-key="Required">
-            Alternatives <span class="required">*</span>
+            How's this different from what's out there? <span class="required">*</span>
           </label>
-          <div class="input-with-icon" data-tooltip-key="alternatives">
-            <textarea id="alternatives" name="alternatives" 
+          <div class="input-with-icon" data-tooltip-key="competitive_landscape">
+            <textarea id="competitive_landscape" name="competitive_landscape" 
                      class="form-textarea" required
-                     placeholder="What similar solutions exist?"></textarea>
+                     placeholder="What similar solutions exist and how will yours be better?"></textarea>
             <span class="tooltip-icon">👁️
               <span class="tooltip-text">
-                What similar products or solutions already exist? How is yours different?
+                What similar products or solutions already exist? How is yours different or better?
               </span>
             </span>
           </div>
-          <div id="alternatives-count" class="word-counter">0 words (5-200)</div>
+          <div id="competitive_landscape-count" class="word-counter">0 words (5-200)</div>
         </div>
 
         <!-- Category (Multi-select) -->
         <div class="form-group">
-          <label class="form-label" data-tooltip-key="category">
-            Categories <span class="optional"> | Hold CTRL to select multiple categories!</span>
+          <label class="form-label" data-tooltip-key="categories">
+            What categories fit your idea? <span class="optional"> | Hold CTRL to pick multiple!</span>
           </label>
-          <select id="category" name="category" class="form-select" multiple>
+          <select id="categories" name="categories" class="form-select" multiple>
             <option value="Technology">Technology</option>
             <option value="Healthcare">Healthcare</option>
             <option value="Education">Education</option>
@@ -164,11 +164,11 @@
 
         <!-- Heard About -->
         <div class="form-group">
-          <label class="form-label" data-tooltip-key="heard_about">
-            How did you hear about Capsera? <span class="optional">(Optional)</span>
+          <label class="form-label" data-tooltip-key="discovery_source">
+            How'd you find us? <span class="optional">(Just curious!)</span>
           </label>
-          <select id="heard_about" name="heard_about" class="form-select">
-            <option value="">Select...</option>
+          <select id="discovery_source" name="discovery_source" class="form-select">
+            <option value="">Choose one...</option>
             <option value="Social Media">Social Media</option>
             <option value="Friend/Family">Friend/Family</option>
             <option value="Search Engine">Search Engine</option>
@@ -180,7 +180,7 @@
         </div>
 
         <button type="submit" class="btn btn-primary" data-ui-key="Submit">
-          Submit Idea
+          Share My Idea 🚀
         </button>
       </form>
     </div>
@@ -383,3 +383,5 @@
     console.log("Public environment configuration loaded");
   </script>
   <script type="module" src="app.js"></script>
+</body>
+</html>
