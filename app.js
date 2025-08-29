@@ -939,137 +939,154 @@ class CapseraApp {
     this.setupWordCounters();
   }
 
- async loadUserSelect() {
+async loadUserSelect() {
   const userSelect = document.getElementById('user-select');
   if (!userSelect) return;
 
   const users = await dbHelper.getUsers();
   
   userSelect.innerHTML = `
-    <option value="" data-ui-key="Choose a user or create one">Choose a user or create one</option>
+    <option value="">Select User</option>
     ${users.map(user => `<option value="${this.escapeHtml(user)}">${this.escapeHtml(user)}</option>`).join('')}
-    <option value="__create_new__" data-ui-key="+ Create New User">+ Create New User</option>
   `;
 
-  // Remove existing event listener to prevent duplicates
-  const newUserSelect = userSelect.cloneNode(true);
-  userSelect.parentNode.replaceChild(newUserSelect, userSelect);
+  userSelect.addEventListener('change', async (e) => {
+    const selectedUser = e.target.value;
+    
+    if (selectedUser) {
+      // Prompt for PIN authentication
+      const pin = prompt(`Enter your 4-digit PIN for ${selectedUser}:`);
+      
+      if (!pin || pin.length !== 4 || !/^\d{4}$/.test(pin)) {
+        this.showMessage("PIN must be exactly 4 digits", "error");
+        e.target.value = '';
+        return;
+      }
 
-  newUserSelect.addEventListener('change', async (e) => {
-    if (e.target.value === '__create_new__') {
-      await this.showCreateUserModal();
-      e.target.value = '';
+      try {
+        const isValidPin = await dbHelper.validateUserPin(selectedUser, pin);
+        
+        if (!isValidPin) {
+          this.showMessage("Invalid PIN", "error");
+          e.target.value = '';
+          return;
+        }
+
+        // PIN is valid, set current user and load their projects
+        this.currentUser = selectedUser;
+        await this.loadProjectSelect();
+        this.showMessage(`Welcome back, ${selectedUser}!`, "success");
+        
+      } catch (error) {
+        console.error("PIN validation error:", error);
+        this.showMessage("Authentication failed", "error");
+        e.target.value = '';
+      }
     } else {
-      this.currentUser = e.target.value;
-      await this.loadProjectSelect();
+      // No user selected, clear current user and projects
+      this.currentUser = null;
+      this.currentProject = null;
+      await this.loadProjectSelect(); // This will show empty project list
     }
   });
 }
 
- async loadProjectSelect() {
+// Reverted loadProjectSelect method - separate project selection
+async loadProjectSelect() {
   const projectSelect = document.getElementById('project-select');
-  if (!projectSelect || !this.currentUser) return;
+  if (!projectSelect) return;
+
+  if (!this.currentUser) {
+    // No user selected, show empty project list
+    projectSelect.innerHTML = `<option value="">Select Project</option>`;
+    return;
+  }
 
   const projects = await dbHelper.getProjectsByUser(this.currentUser);
   
   projectSelect.innerHTML = `
-    <option value="" data-ui-key="Choose a project or create one">Choose a project or create one</option>
+    <option value="">Select Project</option>
     ${projects.map(project => `<option value="${this.escapeHtml(project)}">${this.escapeHtml(project)}</option>`).join('')}
-    <option value="__create_new__" data-ui-key="+ Create New Project">+ Create New Project</option>
   `;
 
-  // Remove existing event listener to prevent duplicates
-  const newProjectSelect = projectSelect.cloneNode(true);
-  projectSelect.parentNode.replaceChild(newProjectSelect, projectSelect);
-
-  newProjectSelect.addEventListener('change', async (e) => {
-    if (e.target.value === '__create_new__') {
-      await this.showCreateProjectModal();
-      e.target.value = '';
-    } else {
-      this.currentProject = e.target.value;
-    }
+  projectSelect.addEventListener('change', (e) => {
+    this.currentProject = e.target.value || null;
   });
 }
 
-  async showCreateUserModal() {
-    const modal = this.createModal(
-      'Create New User',
-      `
-        <div class="form-group">
-          <label class="form-label" data-ui-key="Hey! What should we call you?">Hey! What should we call you?</label>
-          <input type="text" id="new-user-name" class="form-input" placeholder="Enter your name" required>
-        </div>
-        <div class="form-group">
-          <label class="form-label" data-ui-key="Create a 4-digit PIN to keep your account safe:">Create a 4-digit PIN to keep your account safe:</label>
-          <input type="number" id="new-user-pin" class="form-input" placeholder="1234" min="1000" max="9999" required>
-        </div>
-      `,
-      async () => {
-        const name = document.getElementById('new-user-name').value.trim();
-        const pin = document.getElementById('new-user-pin').value.trim();
 
-        if (!name) {
-          this.showMessage("Please enter your name", "error");
-          return false;
-        }
+ 
+// Reverted showCreateUserModal method - separate user creation
+async showCreateUserModal() {
+  const modal = this.createModal(
+    'Create New User',
+    `
+      <div class="form-group">
+        <label class="form-label">Enter your full name:</label>
+        <input type="text" id="new-user-name" class="form-input" placeholder="Your name" required>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Create a 4-digit PIN for this account:</label>
+        <input type="number" id="new-user-pin" class="form-input" placeholder="1234" min="1000" max="9999" required>
+      </div>
+    `,
+    async () => {
+      const name = document.getElementById('new-user-name').value.trim();
+      const pin = document.getElementById('new-user-pin').value.trim();
 
-        if (pin.length !== 4 || !/^\d{4}$/.test(pin)) {
-          this.showMessage("PIN must be exactly 4 digits", "error");
-          return false;
-        }
-
-        await dbHelper.createUser(name, pin);
-        this.currentUser = name;
-        
-        const userSelect = document.getElementById('user-select');
-        if (userSelect) {
-          await this.loadUserSelect();
-          userSelect.value = name;
-        }
-        
-        this.showMessage("Welcome! Your account is ready", "success");
-        return true;
+      if (!name) {
+        this.showMessage("Please enter your name", "error");
+        return false;
       }
-    );
-  }
 
-  async showCreateProjectModal() {
-    if (!this.currentUser) {
-      this.showMessage("Please select a user first", "error");
-      return;
+      if (pin.length !== 4 || !/^\d{4}$/.test(pin)) {
+        this.showMessage("PIN must be exactly 4 digits", "error");
+        return false;
+      }
+
+      await dbHelper.createUser(name, pin);
+      this.showMessage("User created successfully", "success");
+      
+      // Reload user dropdown to include new user
+      await this.loadUserSelect();
+      
+      return true;
     }
+  );
+}
 
-    const modal = this.createModal(
-      'Create New Project',
-      `
-        <div class="form-group">
-          <label class="form-label" data-ui-key="What's the name of your new project?">What's the name of your new project?</label>
-          <input type="text" id="new-project-name" class="form-input" placeholder="My Amazing Project" required>
-        </div>
-      `,
-      async () => {
-        const name = document.getElementById('new-project-name').value.trim();
-
-        if (!name) {
-          this.showMessage("Please enter a project name", "error");
-          return false;
-        }
-
-        await dbHelper.createProject(this.currentUser, name);
-        this.currentProject = name;
-        
-        const projectSelect = document.getElementById('project-select');
-        if (projectSelect) {
-          await this.loadProjectSelect();
-          projectSelect.value = name;
-        }
-        
-        this.showMessage("Great! Your new project is set up", "success");
-        return true;
-      }
-    );
+ async showCreateProjectModal() {
+  if (!this.currentUser) {
+    this.showMessage("Please select a user first", "error");
+    return;
   }
+
+  const modal = this.createModal(
+    'Create New Project',
+    `
+      <div class="form-group">
+        <label class="form-label">Enter project name:</label>
+        <input type="text" id="new-project-name" class="form-input" placeholder="My Project" required>
+      </div>
+    `,
+    async () => {
+      const name = document.getElementById('new-project-name').value.trim();
+
+      if (!name) {
+        this.showMessage("Please enter a project name", "error");
+        return false;
+      }
+
+      await dbHelper.createProject(this.currentUser, name);
+      this.showMessage("Project created successfully", "success");
+      
+      // Reload project dropdown to include new project
+      await this.loadProjectSelect();
+      
+      return true;
+    }
+  );
+}
 
   setupSubmitForm() {
     const form = document.getElementById('submit-form');
