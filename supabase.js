@@ -248,42 +248,25 @@ export const supabaseHelper = {
   },
 
   // Delete user (would need additional logic for PIN verification)
- // Updated deleteUser method in supabase.js
-async deleteUser(fullName, deviceId) {
-  try {
-    // First, delete all ideas/projects associated with this user
-    const { error: ideasError } = await supabase
-      .from("ideas")
-      .delete()
-      .eq("full_name", fullName)
-      .eq("device_id", deviceId);
+  async deleteUser(fullName, deviceId) {
+    try {
+      const { error } = await supabase
+        .from("users")
+        .delete()
+        .eq("full_name", fullName)
+        .eq("device_id", deviceId); // make sure deletion is device-specific
 
-    if (ideasError) {
-      console.error("Error deleting user ideas:", ideasError);
-      throw new Error(`Failed to delete user projects: ${ideasError.message}`);
+      if (error) {
+        console.error("Error deleting user:", error);
+        throw error;
+      }
+
+      return true;
+    } catch (error) {
+      console.error("Error in deleteUser:", error);
+      throw error;
     }
-
-    console.log(`Deleted all ideas for user: ${fullName} (device: ${deviceId})`);
-
-    // Then delete the user record
-    const { error: userError } = await supabase
-      .from("users")
-      .delete()
-      .eq("full_name", fullName)
-      .eq("device_id", deviceId);
-
-    if (userError) {
-      console.error("Error deleting user:", userError);
-      throw new Error(`Failed to delete user: ${userError.message}`);
-    }
-
-    console.log(`Successfully deleted user and all associated projects: ${fullName}`);
-    return true;
-  } catch (error) {
-    console.error("Error in deleteUser:", error);
-    throw error;
-  }
-},
+  },
 
   // Check connection status
   async checkConnection() {
