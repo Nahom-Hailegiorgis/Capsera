@@ -954,39 +954,13 @@ async loadUserSelect() {
     const selectedUser = e.target.value;
     
     if (selectedUser) {
-      // Prompt for PIN authentication
-      const pin = prompt(`Enter your 4-digit PIN for ${selectedUser}:`);
-      
-      if (!pin || pin.length !== 4 || !/^\d{4}$/.test(pin)) {
-        this.showMessage("PIN must be exactly 4 digits", "error");
-        e.target.value = '';
-        return;
-      }
-
-      try {
-        const isValidPin = await dbHelper.validateUserPin(selectedUser, pin);
-        
-        if (!isValidPin) {
-          this.showMessage("Invalid PIN", "error");
-          e.target.value = '';
-          return;
-        }
-
-        // PIN is valid, set current user and load their projects
-        this.currentUser = selectedUser;
-        await this.loadProjectSelect();
-        this.showMessage(`Welcome back, ${selectedUser}!`, "success");
-        
-      } catch (error) {
-        console.error("PIN validation error:", error);
-        this.showMessage("Authentication failed", "error");
-        e.target.value = '';
-      }
+      // Show PIN authentication modal
+      await this.showPinAuthModal(selectedUser, userSelect);
     } else {
       // No user selected, clear current user and projects
       this.currentUser = null;
       this.currentProject = null;
-      await this.loadProjectSelect(); // This will show empty project list
+      await this.loadProjectSelect();
     }
   });
 }
@@ -1014,7 +988,200 @@ async loadProjectSelect() {
   });
 }
 
-
+async showPinAuthModal(userName, userSelectElement) {
+  return new Promise((resolve) => {
+    const overlay = document.createElement('div');
+    overlay.className = 'modal-overlay';
+    overlay.style.cssText = `
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0, 0, 0, 0.6);
+      z-index: 1000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    `;
+    
+    overlay.innerHTML = `
+      <div class="modal-content" style="
+        background: white;
+        border-radius: 12px;
+        padding: 2rem;
+        max-width: 400px;
+        width: 90%;
+        box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+      ">
+        <div class="modal-header" style="text-align: center; margin-bottom: 1.5rem;">
+          <h3 style="margin: 0; color: #333;">Welcome back!</h3>
+          <p style="margin: 0.5rem 0 0 0; color: #666;">Enter your PIN for <strong>${this.escapeHtml(userName)}</strong></p>
+        </div>
+        
+        <div class="modal-body">
+          <div class="form-group">
+            <input 
+              type="password" 
+              id="pin-input" 
+              class="form-input" 
+              placeholder="Enter 4-digit PIN"
+              maxlength="4"
+              style="
+                width: 100%;
+                padding: 12px;
+                border: 2px solid #ddd;
+                border-radius: 8px;
+                font-size: 1.1rem;
+                text-align: center;
+                letter-spacing: 0.5rem;
+              "
+              autocomplete="off"
+            >
+          </div>
+        </div>
+        
+        <div class="modal-footer" style="
+          display: flex;
+          gap: 1rem;
+          justify-content: flex-end;
+          margin-top: 1.5rem;
+        ">
+          <button class="btn-cancel" style="
+            padding: 10px 20px;
+            border: 2px solid #ddd;
+            background: white;
+            border-radius: 6px;
+            cursor: pointer;
+            color: #666;
+          ">Cancel</button>
+          
+          <button class="btn-login" style="
+            padding: 10px 20px;
+            border: none;
+            background: var(--capsera-accent, #007bff);
+            color: white;
+            border-radius: 6px;
+            cursor: pointer;
+            font-weight: 600;
+          ">Login</button>
+        </div>
+      </div>
+    `;
+    
+    document.body.appendChild(overlay);
+    
+    // Focus on PIN input
+    const pinInput = overlay.querySelector('#pin-input');
+    const cancelBtn = overlay.querySelector('.btn-cancel');
+    const loginBtn = overlay.querySelector('.btn-login');
+    
+    pinInput.focus();
+    
+    // Auto-format PIN input (numbers only)
+    pinInput.addEventListener('input', (e) => {
+      e.target.value = e.target.value.replace(/[^0-9]/g, '');
+    });
+    
+    // Handle Enter key
+    pinInput.addEventListener('keypress', (e) => {
+      if (e.key === 'Enter') {
+        loginBtn.click();
+      }
+    });
+    
+    // Handle Escape key
+    document.addEventListener('keydown', function escapeHandler(e) {
+      if (e.key === 'Escape') {
+        document.removeEventListener('keydown', escapeHandler);
+        closeModal();
+      }
+    });
+    
+    // Close modal function
+    const closeModal = () => {
+      overlay.remove();
+      // Reset user selection dropdown
+      userSelectElement.value = '';
+      resolve();
+    };
+    
+    // Cancel button
+    cancelBtn.addEventListener('click', closeModal);
+    
+    // Click outside to close
+    overlay.addEventListener('click', (e) => {
+      if (e.target === overlay) {
+        closeModal();
+      }
+    });
+    
+    // Login button
+    loginBtn.addEventListener('click', async () => {
+      const pin = pinInput.value.trim();
+      
+      // Validate PIN format
+      if (!pin || pin.length !== 4 || !/^\d{4}$/.test(pin)) {
+        this.showMessage("PIN must be exactly 4 digits", "error");
+        pinInput.value = '';
+        pinInput.focus();
+        return;
+      }
+      
+      // Disable login button during authentication
+      loginBtn.disabled = true;
+      loginBtn.textContent = 'Checking...';
+      loginBtn.style.opacity = '0.7';
+      
+      try {
+        // Validate PIN with database
+        const isValidPin = await dbHelper.validateUserPin(userName, pin);
+        
+        if (isValidPin) {
+          // Success: Set current user and load projects
+          this.currentUser = userName;
+          
+          // Update dropdown to show selected user
+          userSelectElement.value = userName;
+          
+          // Load user's projects
+          await this.loadProjectSelect();
+          
+          // Close modal first
+          overlay.remove();
+          
+          // Then show success message
+          this.showMessage("Success! Welcome back.", "success");
+          
+        } else {
+          // Failure: Show error and keep modal open
+          this.showMessage("Fail. Try again.", "error");
+          
+          // Reset PIN input
+          pinInput.value = '';
+          pinInput.focus();
+        }
+        
+      } catch (error) {
+        console.error("PIN validation error:", error);
+        this.showMessage("Fail. Try again.", "error");
+        
+        // Reset PIN input on error
+        pinInput.value = '';
+        pinInput.focus();
+      } finally {
+        // Re-enable login button if modal still exists
+        if (document.body.contains(overlay)) {
+          loginBtn.disabled = false;
+          loginBtn.textContent = 'Login';
+          loginBtn.style.opacity = '1';
+        }
+      }
+      
+      resolve();
+    });
+  });
+}
  
 // Reverted showCreateUserModal method - separate user creation
 async showCreateUserModal() {
