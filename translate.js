@@ -1,8 +1,8 @@
-// new translate.js - Enhanced Google Translate integration with Netlify Functions 
+// translate.js - Enhanced Google Translate integration with Netlify Functions
 import { dbHelper } from "./db.js";
 
 export const translator = {
-  supportedLangs: ["en", "hi", "bn", "te", "mr", "ta", "gu", "ur", "ml"],
+  supportedLangs: ["en", "am", "fr", "sw", "ar"],
 
   defaultTooltips: {
     ideal_customer_profile:
@@ -56,18 +56,6 @@ export const translator = {
     Categories: "Categories",
     "Quality Score": "Quality Score",
 
-    // New conversational field labels
-    "Who's this for?": "Who's this for?",
-    "The Big Idea": "The Big Idea", 
-    "Problems It Solves": "Problems It Solves",
-    "What's Out There Already": "What's Out There Already",
-
-    // Conversational placeholders
-    "Tell us about your ideal customer - who would love this product?": "Tell us about your ideal customer - who would love this product?",
-    "What's your brilliant idea? Don't hold back!": "What's your brilliant idea? Don't hold back!",
-    "What problems does this solve for people?": "What problems does this solve for people?",
-    "What similar solutions exist out there?": "What similar solutions exist out there?",
-
     // Feedback form
     "Share Your Feedback": "Share Your Feedback",
     "How can we improve Capsera?": "How can we improve Capsera?",
@@ -75,21 +63,22 @@ export const translator = {
     "Contact (Optional)": "Contact (Optional)",
     "Email or phone (optional)": "Email or phone (optional)",
 
-    // User management with conversational tone
-    "Hey! What should we call you?": "Hey! What should we call you?",
-    "Create a 4-digit PIN to keep your account safe:": "Create a 4-digit PIN to keep your account safe:",
-    "Enter your 4-digit PIN to continue:": "Enter your 4-digit PIN to continue:",
-    "What's the name of your new project?": "What's the name of your new project?",
-    "Enter your 4-digit PIN to delete this user:": "Enter your 4-digit PIN to delete this user:",
+    // User management
+    "Enter your full name:": "Enter your full name:",
+    "Create a 4-digit PIN for this account:":
+      "Create a 4-digit PIN for this account:",
+    "Enter your 4-digit PIN:": "Enter your 4-digit PIN:",
+    "Enter project name:": "Enter project name:",
+    "Enter 4-digit PIN to delete user:": "Enter 4-digit PIN to delete user:",
 
-    // Conversational submission form
-    "Who's This For?": "Who's This For?",
-    "Tell us about your ideal customer": "Tell us about your ideal customer",
-    "The Big Idea": "The Big Idea",
-    "What's your brilliant product idea?": "What's your brilliant product idea?",
-    "Problems It Solves": "Problems It Solves",
+    // Submission form
+    "Target Customer Profile": "Target Customer Profile",
+    "Describe your ideal customer": "Describe your ideal customer",
+    "Your Product Idea": "Your Product Idea",
+    "Describe your product or service": "Describe your product or service",
+    "Pain Points": "Pain Points",
     "What problems does this solve?": "What problems does this solve?",
-    "What's Out There Already": "What's Out There Already",
+    "Existing Alternatives": "Existing Alternatives",
     "What similar solutions exist?": "What similar solutions exist?",
     Category: "Category",
     "How did you hear about us?": "How did you hear about us?",
@@ -117,30 +106,24 @@ export const translator = {
     "Last updated": "Last updated",
     Close: "Close",
     Delete: "Delete",
-    "Previous Drafts": "Previous Drafts",
-    "Draft History": "Draft History",
 
-    // Conversational validation messages
-    "Hey! Please pick a user or create one first": "Hey! Please pick a user or create one first",
-    "Don't forget to select or create a project": "Don't forget to select or create a project",
-    "We'd love to hear your thoughts! Please share your feedback": "We'd love to hear your thoughts! Please share your feedback",
+    // Validation messages
+    "Please select or create a user first":
+      "Please select or create a user first",
+    "Please select or create a project": "Please select or create a project",
+    "Please enter your feedback message": "Please enter your feedback message",
     "PIN must be exactly 4 digits": "PIN must be exactly 4 digits",
-    "Oops! That PIN doesn't match": "Oops! That PIN doesn't match",
-    "User deleted successfully": "User deleted successfully",
-    "Couldn't delete user - please try again": "Couldn't delete user - please try again",
-    "Welcome! Your account is ready": "Welcome! Your account is ready",
-    "Great! Your new project is set up": "Great! Your new project is set up",
+    "Invalid PIN": "Invalid PIN",
+    "User deleted": "User deleted",
+    "Failed to delete user": "Failed to delete user",
+    "User created": "User created",
+    "Project created": "Project created",
     "Switched to": "Switched to",
     "Language updated successfully": "Language updated successfully",
     "Failed to update language": "Failed to update language",
-    "Thanks for the feedback! We really appreciate it": "Thanks for the feedback! We really appreciate it",
-    "Oops! Couldn't submit feedback. Please try again": "Oops! Couldn't submit feedback. Please try again",
-
-    // New greeting patterns
-    "Hey": "Hey",
-    "Hi there": "Hi there",
-    "Welcome back": "Welcome back",
-    "Good to see you": "Good to see you",
+    "Thank you for your feedback!": "Thank you for your feedback!",
+    "Failed to submit feedback. Please try again.":
+      "Failed to submit feedback. Please try again.",
   },
 
   // Enhanced translation fetching with progress tracking
@@ -337,12 +320,12 @@ export const translator = {
     // Update common headings
     const headings = {
       h2: ["Ideas", "My Submissions", "Submit Ideas", "Settings"],
-      h3: ["Share Your Feedback", "AI Feedback", "Idea Details", "Previous Drafts", "Draft History"],
+      h3: ["Share Your Feedback", "AI Feedback", "Idea Details"],
       h4: [
-        "Customer Profile", "Who's this for?",
-        "Product Idea", "The Big Idea",
-        "Pain Points", "Problems It Solves",
-        "Alternatives", "What's Out There Already",
+        "Customer Profile",
+        "Product Idea",
+        "Pain Points",
+        "Alternatives",
         "Projects Summary",
         "All Submissions",
       ],
@@ -351,10 +334,7 @@ export const translator = {
           key.includes("Profile") ||
           key.includes("Idea") ||
           key.includes("Points") ||
-          key.includes("Alternatives") ||
-          key.includes("Who's") ||
-          key.includes("Problems") ||
-          key.includes("What's")
+          key.includes("Alternatives")
       ),
     };
 
@@ -374,14 +354,10 @@ export const translator = {
   getLanguageName(code) {
     const names = {
       en: "English",
-      hi: "हिन्दी (Hindi)",
-      bn: "বাংলা (Bengali)",
-      te: "తెలుగు (Telugu)",
-      mr: "मराठी (Marathi)", 
-      ta: "தமிழ் (Tamil)",
-      gu: "ગુજરાતી (Gujarati)",
-      ur: "اردو (Urdu)",
-      ml: "മലയാളം (Malayalam)",
+      am: "አማርኛ (Amharic)",
+      fr: "Français (French)",
+      sw: "Kiswahili (Swahili)",
+      ar: "العربية (Arabic)",
     };
     return names[code] || code;
   },
@@ -509,12 +485,5 @@ export const translator = {
       checks,
       confidence: passed ? 0.8 : 0.3,
     };
-  },
-
-  // Get conversational greeting based on user name
-  getGreeting(userName) {
-    const greetings = ["Hey", "Hi there", "Welcome back", "Good to see you"];
-    const randomGreeting = greetings[Math.floor(Math.random() * greetings.length)];
-    return userName ? `${randomGreeting}, ${userName}!` : randomGreeting;
   },
 };
