@@ -48,38 +48,32 @@
       <h2 data-ui-key="Submit Ideas">Submit Ideas</h2>
 
       <!-- User and Project Selection -->
-     <div class="user-project-selection">
-  <div class="form-group">
-    <label class="form-label" data-ui-key="Select User">Select User</label>
-    <select id="user-select" class="form-select" required>
-      <option value="" data-ui-key="Select User">Select User</option>
-    </select>
-    <button type="button" class="btn btn-secondary btn-sm" onclick="app.showCreateUserModal()" data-ui-key="Create New User">
-      Create New User
-    </button>
-  </div>
-  
-  <div class="form-group">
-    <label class="form-label" data-ui-key="Select Project">Select Project</label>
-    <select id="project-select" class="form-select" required>
-      <option value="" data-ui-key="Select Project">Select Project</option>
-    </select>
-    <button type="button" class="btn btn-secondary btn-sm" onclick="app.showCreateProjectModal()" data-ui-key="Create New Project">
-      Create New Project
-    </button>
-  </div>
-</div>
+      <div class="user-project-selection">
+        <div class="form-group">
+          <label class="form-label">Select User</label>
+          <select id="user-select" class="form-select" required>
+            <option value="">Select User</option>
+          </select>
+        </div>
+        
+        <div class="form-group">
+          <label class="form-label">Select Project</label>
+          <select id="project-select" class="form-select" required>
+            <option value="">Select Project</option>
+          </select>
+        </div>
+      </div>
 
       <form id="submit-form">
         <!-- Customer Profile -->
         <div class="form-group">
-          <label class="form-label" data-ui-key="Who's This For?">
-            Who's This For? <span class="required">*</span>
+          <label class="form-label" data-ui-key="Required">
+            Ideal Customer Profile <span class="required">*</span>
           </label>
           <div class="input-with-icon" data-tooltip-key="ideal_customer_profile">
             <textarea id="ideal_customer_profile" name="ideal_customer_profile" 
                      class="form-textarea" required
-                     placeholder="Tell us about your ideal customer - who would love this product?" data-ui-key="Tell us about your ideal customer - who would love this product?"></textarea>
+                     placeholder="Describe who would use your product..."></textarea>
             <span class="tooltip-icon">👁️
               <span class="tooltip-text">
                 Describe who would use your product - their age, job, problems they face, etc.
@@ -91,13 +85,13 @@
 
         <!-- Product Idea -->
         <div class="form-group">
-          <label class="form-label" data-ui-key="The Big Idea">
-            The Big Idea <span class="required">*</span>
+          <label class="form-label" data-ui-key="Required">
+            Product Idea <span class="required">*</span>
           </label>
           <div class="input-with-icon" data-tooltip-key="product_idea">
             <textarea id="product_idea" name="product_idea" 
                      class="form-textarea" required
-                     placeholder="What's your brilliant idea? Don't hold back!" data-ui-key="What's your brilliant idea? Don't hold back!"></textarea>
+                     placeholder="Explain your product idea..."></textarea>
             <span class="tooltip-icon">👁️
               <span class="tooltip-text">
                 Explain your product idea clearly - what does it do and how does it help people?
@@ -109,13 +103,13 @@
 
         <!-- Pain Points -->
         <div class="form-group">
-          <label class="form-label" data-ui-key="Problems It Solves">
-            Problems It Solves <span class="required">*</span>
+          <label class="form-label" data-ui-key="Required">
+            Pain Points <span class="required">*</span>
           </label>
           <div class="input-with-icon" data-tooltip-key="pain_points">
             <textarea id="pain_points" name="pain_points" 
                      class="form-textarea" required
-                     placeholder="What problems does this solve for people?" data-ui-key="What problems does this solve for people?"></textarea>
+                     placeholder="What problems does this solve?"></textarea>
             <span class="tooltip-icon">👁️
               <span class="tooltip-text">
                 What specific problems or frustrations does your target customer experience?
@@ -127,13 +121,13 @@
 
         <!-- Alternatives -->
         <div class="form-group">
-          <label class="form-label" data-ui-key="What's Out There Already">
-            What's Out There Already <span class="required">*</span>
+          <label class="form-label" data-ui-key="Required">
+            Alternatives <span class="required">*</span>
           </label>
           <div class="input-with-icon" data-tooltip-key="alternatives">
             <textarea id="alternatives" name="alternatives" 
                      class="form-textarea" required
-                     placeholder="What similar solutions exist out there?" data-ui-key="What similar solutions exist out there?"></textarea>
+                     placeholder="What similar solutions exist?"></textarea>
             <span class="tooltip-icon">👁️
               <span class="tooltip-text">
                 What similar products or solutions already exist? How is yours different?
@@ -146,46 +140,46 @@
         <!-- Category (Multi-select) -->
         <div class="form-group">
           <label class="form-label" data-tooltip-key="category">
-            Categories <span class="optional" data-ui-key="Hold CTRL to select multiple categories!"> | Hold CTRL to select multiple categories!</span>
+            Categories <span class="optional"> | Hold CTRL to select multiple categories!</span>
           </label>
           <select id="category" name="category" class="form-select" multiple>
-            <option value="Technology" data-ui-key="Technology">Technology</option>
-            <option value="Healthcare" data-ui-key="Healthcare">Healthcare</option>
-            <option value="Education" data-ui-key="Education">Education</option>
-            <option value="Finance" data-ui-key="Finance">Finance</option>
-            <option value="Entertainment" data-ui-key="Entertainment">Entertainment</option>
-            <option value="Food & Beverage" data-ui-key="Food & Beverage">Food & Beverage</option>
-            <option value="Transportation" data-ui-key="Transportation">Transportation</option>
-            <option value="Communication" data-ui-key="Communication">Communication</option>
-            <option value="Productivity" data-ui-key="Productivity">Productivity</option>
-            <option value="Social Impact" data-ui-key="Social Impact">Social Impact</option>
-            <option value="E-commerce" data-ui-key="E-commerce">E-commerce</option>
-            <option value="Gaming" data-ui-key="Gaming">Gaming</option>
-            <option value="Travel" data-ui-key="Travel">Travel</option>
-            <option value="Fitness & Wellness" data-ui-key="Fitness & Wellness">Fitness & Wellness</option>
-            <option value="Environment" data-ui-key="Environment">Environment</option>
-            <option value="Other" data-ui-key="Other">Other</option>
+            <option value="Technology">Technology</option>
+            <option value="Healthcare">Healthcare</option>
+            <option value="Education">Education</option>
+            <option value="Finance">Finance</option>
+            <option value="Entertainment">Entertainment</option>
+            <option value="Food & Beverage">Food & Beverage</option>
+            <option value="Transportation">Transportation</option>
+            <option value="Communication">Communication</option>
+            <option value="Productivity">Productivity</option>
+            <option value="Social Impact">Social Impact</option>
+            <option value="E-commerce">E-commerce</option>
+            <option value="Gaming">Gaming</option>
+            <option value="Travel">Travel</option>
+            <option value="Fitness & Wellness">Fitness & Wellness</option>
+            <option value="Environment">Environment</option>
+            <option value="Other">Other</option>
           </select>
         </div>
 
         <!-- Heard About -->
         <div class="form-group">
           <label class="form-label" data-tooltip-key="heard_about">
-            How did you hear about us? <span class="optional" data-ui-key="(Optional)">(Optional)</span>
+            How did you hear about Capsera? <span class="optional">(Optional)</span>
           </label>
           <select id="heard_about" name="heard_about" class="form-select">
-            <option value="" data-ui-key="Select...">Select...</option>
-            <option value="Social Media" data-ui-key="Social Media">Social Media</option>
-            <option value="Friend/Family" data-ui-key="Friend/Family">Friend/Family</option>
-            <option value="Search Engine" data-ui-key="Search Engine">Search Engine</option>
-            <option value="News/Blog" data-ui-key="News/Blog">News/Blog</option>
-            <option value="Advertisement" data-ui-key="Advertisement">Advertisement</option>
-            <option value="Event/Conference" data-ui-key="Event/Conference">Event/Conference</option>
-            <option value="Other" data-ui-key="Other">Other</option>
+            <option value="">Select...</option>
+            <option value="Social Media">Social Media</option>
+            <option value="Friend/Family">Friend/Family</option>
+            <option value="Search Engine">Search Engine</option>
+            <option value="News/Blog">News/Blog</option>
+            <option value="Advertisement">Advertisement</option>
+            <option value="Event/Conference">Event/Conference</option>
+            <option value="Other">Other</option>
           </select>
         </div>
 
-        <button type="submit" class="btn btn-primary" data-ui-key="Submit Idea">
+        <button type="submit" class="btn btn-primary" data-ui-key="Submit">
           Submit Idea
         </button>
       </form>
@@ -205,7 +199,7 @@
 
       <!-- Users Management -->
       <div class="settings-section">
-        <h3 data-ui-key="Users">Users</h3>
+        <h3>Users</h3>
         <div id="users-list">
           <div class="loading" data-ui-key="Loading...">Loading...</div>
         </div>
@@ -215,26 +209,6 @@
 
   <!-- Modal Overlay Template (Created dynamically) -->
   <style>
-    .form-group {
-    margin-bottom: 1rem;
-  }
-  
-  .form-group .btn {
-    margin-top: 0.5rem;
-    width: 100%;
-  }
-  
-  .btn-secondary {
-    background-color: #6c757d;
-    color: white;
-    border: 1px solid #6c757d;
-  }
-  
-  .btn-sm {
-    padding: 0.375rem 0.75rem;
-    font-size: 0.875rem;
-  }
-    
     .modal-overlay {
       position: fixed;
       top: 0;
@@ -393,14 +367,6 @@
         max-width: 60%;
       }
     }
-    
-      @media (min-width: 768px) {
-    .user-project-selection {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 2rem;
-    }
-  }
   </style>
 
   <!-- Scripts: Load public environment config first -->
@@ -417,5 +383,3 @@
     console.log("Public environment configuration loaded");
   </script>
   <script type="module" src="app.js"></script>
-</body>
-</html>
