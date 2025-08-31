@@ -74,6 +74,8 @@ export const dbHelper = {
           draftStore.createIndex("draft_number", "draft_number", { unique: false });
           draftStore.createIndex("user_uuid", "user_uuid", { unique: false });
           draftStore.createIndex("last_submission_at", "last_submission_at", { unique: false });
+          // ADDED: user_id index for proper linking
+          draftStore.createIndex("user_id", "user_id", { unique: false });
         } else {
           const draftStore = event.target.transaction.objectStore("drafts");
           if (!draftStore.indexNames.contains("project_name")) {
@@ -97,6 +99,10 @@ export const dbHelper = {
           }
           if (!draftStore.indexNames.contains("last_submission_at")) {
             draftStore.createIndex("last_submission_at", "last_submission_at", { unique: false });
+          }
+          // ADDED: user_id index for proper linking
+          if (!draftStore.indexNames.contains("user_id")) {
+            draftStore.createIndex("user_id", "user_id", { unique: false });
           }
         }
 
@@ -398,7 +404,7 @@ export const dbHelper = {
     });
   },
 
-  // Enhanced saveDraft with iteration tracking
+  // Enhanced saveDraft with iteration tracking and user_id
   async saveDraft(submission) {
     const db = await this.getDB();
     const transaction = db.transaction(["drafts"], "readwrite");
@@ -427,6 +433,7 @@ export const dbHelper = {
       saved_at: new Date().toISOString(),
       synced: false,
       user_uuid: submission.user_uuid || null, // Store Supabase user UUID if available
+      user_id: submission.user_id || null, // ADDED: Store user_id for proper linking
     };
 
     return new Promise((resolve, reject) => {
