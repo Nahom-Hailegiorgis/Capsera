@@ -1,4 +1,4 @@
-// supabase.js - Supabase client configuration with enhanced structured AI grading and orphan prevention
+// supabase.js - Supabase client configuration with enhanced structured AI grading
 import { createClient } from "https://cdn.skypack.dev/@supabase/supabase-js@2.39.3";
 
 // Get config from environment variables or use placeholders
@@ -33,6 +33,7 @@ export const supabaseHelper = {
   },
 
   // Get idea details (via Edge Function for EUREKA check)
+  // Add this debug version to your supabase.js getIdeaDetails method
   async getIdeaDetails(ideaId) {
     console.log("🔍 DEBUG: Starting getIdeaDetails for:", ideaId);
     console.log("🔍 DEBUG: EDGE_FUNCTION_URL:", EDGE_FUNCTION_URL);
@@ -84,100 +85,17 @@ export const supabaseHelper = {
     }
   },
 
-  // ADDED: Create project method stub - needs implementation
-  async createProject(projectData) {
-    console.log("🔧 SUPABASE DEBUG: Creating project", projectData);
-    
-    // TODO: This method needs to be implemented with the actual projects table structure
-    // Expected projectData: { name, user_id, created_by }
-    
-    try {
-      // TODO: Replace with actual table name and structure
-      // const { data, error } = await supabase
-      //   .from("projects")
-      //   .insert([{
-      //     name: projectData.name,
-      //     user_id: projectData.user_id,
-      //     created_by: projectData.created_by,
-      //     created_at: new Date().toISOString()
-      //   }])
-      //   .select()
-      //   .single();
-
-      // if (error) {
-      //   console.error("🔧 SUPABASE DEBUG: Error creating project:", error);
-      //   throw error;
-      // }
-
-      // console.log("🔧 SUPABASE DEBUG: Project created successfully:", data);
-      // return data;
-
-      // Placeholder return until implementation is complete
-      throw new Error("createProject method not yet implemented - needs projects table schema");
-    } catch (error) {
-      console.error("🔧 SUPABASE DEBUG: Error in createProject:", error);
-      throw error;
-    }
-  },
-
-  // ADDED: Get projects by user ID method stub - needs implementation  
-  async getProjectsByUserId(userId) {
-    console.log("🔧 SUPABASE DEBUG: Getting projects for user", userId);
-    
-    // TODO: This method needs to be implemented with the actual projects table structure
-    
-    try {
-      // TODO: Replace with actual table name and structure
-      // const { data, error } = await supabase
-      //   .from("projects")
-      //   .select("*")
-      //   .eq("user_id", userId)
-      //   .order("created_at", { ascending: false });
-
-      // if (error) {
-      //   console.error("🔧 SUPABASE DEBUG: Error fetching projects:", error);
-      //   throw error;
-      // }
-
-      // return data || [];
-
-      // Placeholder return until implementation is complete
-      throw new Error("getProjectsByUserId method not yet implemented - needs projects table schema");
-    } catch (error) {
-      console.error("🔧 SUPABASE DEBUG: Error in getProjectsByUserId:", error);
-      throw error;
-    }
-  },
-
-  // Enhanced submitFinalIdea with iteration tracking and orphan prevention
+  // Submit final idea (attempt 3) - Fixed with proper schema
   async submitFinalIdea(submission) {
     console.log("🔧 SUPABASE DEBUG: Submitting final idea", submission);
 
     try {
-      // Step 1: Create or get user first to prevent orphaning
-      let userUuid = null;
-      if (submission.full_name) {
-        const userData = await this.createOrGetUser(submission.full_name, submission.device_id);
-        userUuid = userData?.id;
-      }
-
-      // Step 2: Get iteration info for draft tracking
-      const iterationInfo = await this.getIdeaIterationInfo(
-        submission.full_name, 
-        submission.project_name || "Default Project"
-      );
-
-      // Step 3: Submit final idea with enhanced data
       const { data, error } = await supabase
         .from("ideas")
         .insert([
           {
             device_id: submission.device_id,
             full_name: submission.full_name,
-            user_uuid: userUuid, // Link to user to prevent orphaning
-            // FIXED: Include user_id in submission instead of just user_name
-            user_id: submission.user_id, // ADDED: Include user_id for proper linking
-            project_name: submission.project_name,
             version: submission.version || 3,
             is_final: true,
             ideal_customer_profile: submission.ideal_customer_profile,
@@ -186,13 +104,8 @@ export const supabaseHelper = {
             alternatives: submission.alternatives,
             category: submission.category || [],
             heard_about: submission.heard_about,
-            ai_feedback: submission.ai_feedback, // Structured critique and grading
+            ai_feedback: submission.ai_feedback, // Now contains structured critique and grading
             quality_score: submission.quality_score,
-            // New iteration tracking fields
-            draft_number: iterationInfo.draft_number,
-            previous_score: iterationInfo.previous_score,
-            last_submission_at: new Date().toISOString(),
-            first_draft_submitted_at: iterationInfo.first_draft_submitted_at || new Date().toISOString(),
           },
         ])
         .select();
@@ -213,151 +126,30 @@ export const supabaseHelper = {
     }
   },
 
-  // Enhanced createUser with orphan prevention - creates or gets existing user
-  async createOrGetUser(fullName, deviceId) {
-    console.log("🔧 SUPABASE: Creating or getting user:", { fullName, deviceId });
-
-    try {
-      // First, try to get existing user
-      const { data: existingUser, error: getError } = await supabase
-        .from("users")
-        .select("*")
-        .eq("full_name", fullName)
-        .eq("device_id", deviceId)
-        .is("deleted_at", null) // Only get non-deleted users
-        .single();
-
-      if (existingUser && !getError) {
-        console.log("🔧 SUPABASE: Found existing user:", existingUser.id);
-        return existingUser;
-      }
-
-      // If no existing user found, create new one
-      const { data: newUser, error: createError } = await supabase
-        .from("users")
-        .insert([
-          {
-            full_name: fullName,
-            device_id: deviceId,
-            deleted_at: null,
-          },
-        ])
-        .select()
-        .single();
-
-      if (createError) {
-        // Handle duplicate key error (race condition)
-        if (createError.code === "23505") {
-          console.warn("🔧 SUPABASE: User created by another process, fetching...");
-          const { data: raceUser, error: raceError } = await supabase
-            .from("users")
-            .select("*")
-            .eq("full_name", fullName)
-            .eq("device_id", deviceId)
-            .is("deleted_at", null)
-            .single();
-
-          if (raceError) {
-            console.error("🔧 SUPABASE: Error fetching after race condition:", raceError);
-            throw raceError;
-          }
-          return raceUser;
-        }
-        throw createError;
-      }
-
-      console.log("🔧 SUPABASE: Created new user:", newUser.id);
-      return newUser;
-    } catch (error) {
-      console.error("🔧 SUPABASE: Error in createOrGetUser:", error);
-      throw error;
-    }
-  },
-
-  // Legacy createUser method for backwards compatibility
+  // Create user after successful final submission
+  // Create user after successful final submission
   async createUser(fullName, deviceId) {
-    return this.createOrGetUser(fullName, deviceId);
-  },
-
-  // New method: Get iteration info for draft tracking
-  async getIdeaIterationInfo(fullName, projectName = "Default Project") {
     try {
-      console.log("🔧 SUPABASE: Getting iteration info for:", { fullName, projectName });
-
-      const { data: ideas, error } = await supabase
-        .from("ideas")
-        .select("draft_number, quality_score, first_draft_submitted_at, last_submission_at")
-        .eq("full_name", fullName)
-        .eq("project_name", projectName || "Default Project") // Handle null project names
-        .order("created_at", { ascending: false });
+      const { data, error } = await supabase
+        .from("users")
+        .insert([{ full_name: fullName, device_id: deviceId }])
+        .select();
 
       if (error) {
-        console.error("🔧 SUPABASE: Error fetching iteration info:", error);
-        // Return default values on error
-        return {
-          draft_number: 1,
-          previous_score: null,
-          first_draft_submitted_at: null,
-        };
+        console.warn("User creation warning:", error);
+        return null;
       }
 
-      if (!ideas || ideas.length === 0) {
-        return {
-          draft_number: 1,
-          previous_score: null,
-          first_draft_submitted_at: null,
-        };
-      }
-
-      const latestIdea = ideas[0];
-      return {
-        draft_number: (latestIdea.draft_number || 1) + 1,
-        previous_score: latestIdea.quality_score || null,
-        first_draft_submitted_at: latestIdea.first_draft_submitted_at,
-      };
+      return data?.[0];
     } catch (error) {
-      console.error("🔧 SUPABASE: Error in getIdeaIterationInfo:", error);
-      return {
-        draft_number: 1,
-        previous_score: null,
-        first_draft_submitted_at: null,
-      };
+      console.error("Error in createUser:", error);
+      return null;
     }
   },
 
-  // New method: Check submission cooldown
-  async checkSubmissionCooldown(fullName, projectName = "Default Project") {
-    try {
-      const { data: ideas, error } = await supabase
-        .from("ideas")
-        .select("last_submission_at, draft_number")
-        .eq("full_name", fullName)
-        .eq("project_name", projectName)
-        .order("last_submission_at", { ascending: false })
-        .limit(1);
+  // Submit feedback - Enhanced
+  // Replace the submitFeedback method in supabase.js with this enhanced version
 
-      if (error || !ideas || ideas.length === 0) {
-        return { can_submit: true, cooldown_remaining: 0, next_draft_number: 1 };
-      }
-
-      const lastSubmission = new Date(ideas[0].last_submission_at);
-      const cooldownPeriod = 24 * 60 * 60 * 1000; // 24 hours
-      const timeSinceLastSubmission = Date.now() - lastSubmission.getTime();
-      const canSubmit = timeSinceLastSubmission >= cooldownPeriod;
-      const cooldownRemaining = Math.max(0, cooldownPeriod - timeSinceLastSubmission);
-
-      return {
-        can_submit: canSubmit,
-        cooldown_remaining: cooldownRemaining,
-        next_draft_number: (ideas[0].draft_number || 1) + 1,
-      };
-    } catch (error) {
-      console.error("🔧 SUPABASE: Error checking cooldown:", error);
-      return { can_submit: true, cooldown_remaining: 0, next_draft_number: 1 };
-    }
-  },
-
-  // Enhanced submitFeedback
   async submitFeedback(feedbackData) {
     console.log("🔧 SUPABASE: Starting feedback submission", {
       device_id: feedbackData.device_id,
@@ -412,8 +204,7 @@ export const supabaseHelper = {
       throw error;
     }
   },
-
-  // Test feedback connection
+  // Also add a method to check feedback submission status
   async checkFeedbackConnection() {
     try {
       console.log("🔧 SUPABASE FEEDBACK: Testing connection");
@@ -436,14 +227,13 @@ export const supabaseHelper = {
     }
   },
 
-  // Get all users with orphan prevention
+  // Get all users (for settings screen)
   async getAllUsers(deviceId) {
     try {
       const { data, error } = await supabase
         .from("users")
         .select("*")
-        .eq("device_id", deviceId)
-        .is("deleted_at", null) // Only get non-deleted users
+        .eq("device_id", deviceId) // filter by device
         .order("created_at", { ascending: false });
 
       if (error) {
@@ -457,46 +247,23 @@ export const supabaseHelper = {
     }
   },
 
-  // Enhanced deleteUser with proper cleanup and orphan prevention
+  // Delete user (would need additional logic for PIN verification)
   async deleteUser(fullName, deviceId) {
-    console.log("🔧 SUPABASE: Starting user deletion:", { fullName, deviceId });
-
     try {
-      // Step 1: Soft delete the user (mark as deleted)
-      const { data: deletedUser, error: deleteError } = await supabase
+      const { error } = await supabase
         .from("users")
-        .update({ deleted_at: new Date().toISOString() })
+        .delete()
         .eq("full_name", fullName)
-        .eq("device_id", deviceId)
-        .is("deleted_at", null)
-        .select();
+        .eq("device_id", deviceId); // make sure deletion is device-specific
 
-      if (deleteError) {
-        console.error("🔧 SUPABASE: Error soft-deleting user:", deleteError);
-        throw deleteError;
-      }
-
-      if (!deletedUser || deletedUser.length === 0) {
-        console.warn("🔧 SUPABASE: User not found for deletion");
-        return false;
-      }
-
-      console.log("🔧 SUPABASE: User soft-deleted successfully");
-
-      // Step 2: Handle orphaned ideas - the CASCADE DELETE in the foreign key will handle this
-      // automatically, but we log it for visibility
-      const { data: orphanedIdeas, error: orphanError } = await supabase
-        .from("ideas")
-        .select("id")
-        .eq("user_uuid", deletedUser[0].id);
-
-      if (!orphanError && orphanedIdeas) {
-        console.log(`🔧 SUPABASE: ${orphanedIdeas.length} ideas will be deleted via CASCADE`);
+      if (error) {
+        console.error("Error deleting user:", error);
+        throw error;
       }
 
       return true;
     } catch (error) {
-      console.error("🔧 SUPABASE: Error in deleteUser:", error);
+      console.error("Error in deleteUser:", error);
       throw error;
     }
   },
