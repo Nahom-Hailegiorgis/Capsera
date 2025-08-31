@@ -438,21 +438,21 @@ class CapseraApp {
     }
   }
 
- renderSubmissionItem(draft, projectName) {
-    const statusText = draft.is_final ? this.t("Final Submission") : ${this.t("Draft")} v${draft.version};
+  renderSubmissionItem(draft, projectName) {
+    const statusText = draft.is_final ? this.t("Final Submission") : `${this.t("Draft")} v${draft.version}`;
     const statusClass = draft.is_final ? "success" : "warning";
     const aiScore = draft.ai_feedback?.overall_score || draft.ai_feedback?.score;
 
-    return 
+    return `
       <div class="submission-item-compact">
         <div class="submission-meta-compact">
           <span class="status ${statusClass}">${statusText}</span>
           <span class="submission-date">${new Date(draft.saved_at).toLocaleDateString()}</span>
-          ${aiScore ? <span class="ai-score">AI: ${aiScore}/100</span> : ""}
+          ${aiScore ? `<span class="ai-score">AI: ${aiScore}/100</span>` : ""}
         </div>
         ${this.renderAIFeedback(draft.ai_feedback)}
       </div>
-    ;
+    `;
   }
 
   // Screen 3: Enhanced Submit Ideas with Dynamic Forms and Translation
