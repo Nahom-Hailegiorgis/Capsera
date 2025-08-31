@@ -3,7 +3,6 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta name="app-version" content="2025-08-31-1">
   <title>Capsera - Idea Submission Platform</title>
   <link rel="manifest" href="/manifest.json">
   <link rel="icon" type="image/x-icon" href="/favicon.ico">
@@ -221,6 +220,7 @@
                 <option value="Social Media" data-ui-key="Social Media">Social Media</option>
                 <option value="Friend/Family" data-ui-key="Friend/Family">Friend/Family</option>
                 <option value="Search Engine" data-ui-key="Search Engine">Search Engine</option>
+                <option value="News/Blog" data-ui-key="News/Blog">News/Blog</option>
                 <option value="Advertisement" data-ui-key="Advertisement">Advertisement</option>
                 <option value="Event/Conference" data-ui-key="Event/Conference">Event/Conference</option>
                 <option value="Other" data-ui-key="Other">Other</option>
@@ -430,57 +430,6 @@
     .modal-body {
       line-height: 1.6;
     }
-
-    /* NEW: Scroll frame for submissions */
-    .drafts-scroll-container {
-      max-height: 400px;
-      overflow-y: auto;
-      border: 1px solid #e0e0e0;
-      border-radius: 6px;
-      padding: 10px;
-      background-color: #fafafa;
-    }
-
-    .drafts-scroll-container::-webkit-scrollbar {
-      width: 6px;
-    }
-
-    .drafts-scroll-container::-webkit-scrollbar-thumb {
-      background: #c0c0c0;
-      border-radius: 3px;
-    }
-
-    .update-banner {
-      position: fixed;
-      top: 0;
-      left: 0;
-      right: 0;
-      z-index: 1002;
-      background: #f9bd45;
-      padding: 10px;
-      text-align: center;
-      box-shadow: 0 2px 8px rgba(0,0,0,0.1);
-    }
-
-    .update-content {
-      display: flex;
-      justify-content: center;
-      align-items: center;
-      gap: 10px;
-    }
-
-    .offline-indicator {
-      position: fixed;
-      bottom: 20px;
-      left: 20px;
-      z-index: 1001;
-      background: #ff6b6b;
-      color: white;
-      padding: 8px 16px;
-      border-radius: 20px;
-      font-size: 0.9rem;
-      font-weight: 600;
-    }
   </style>
 
   <!-- Scripts -->
@@ -490,7 +439,7 @@
       SUPABASE_ANON_KEY: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNib2VzY292bGVib2twbnJzbndwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTUxMjc0ODAsImV4cCI6MjA3MDcwMzQ4MH0.2mrbRIp7A14hRs_mz37sPshZOrmt0uT9UsM0JWRSvx0",
       EUREKA: true,
       EDGE_FUNCTION_URL: "https://cboescovlebokpnrsnwp.supabase.co/functions/v1",
-      DRAFT_COOLDOWN_DAYS: 7
+      DRAFT_COOLDOWN_DAYS: 7 // Configurable cooldown period
     };
   </script>
   <script type="module" src="app.js"></script>
