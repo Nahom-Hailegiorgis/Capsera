@@ -219,75 +219,90 @@ body {
   font-size: 0.85rem;
 }
 
-/* Add these styles to your styles.css file */
+/* Add this CSS to styles.css for the scroll frame enhancement */
 
-.draft-content-frame {
-  margin: 12px 0;
-  border: 1px solid #e0e0e0;
-  border-radius: 6px;
-  background: #fafafa;
-}
-
-.draft-content-scroll {
+.drafts-scroll-frame {
   max-height: 300px;
   overflow-y: auto;
-  padding: 16px;
-  font-size: 0.9rem;
+  border: 1px solid var(--capsera-border, #ddd);
+  border-radius: 6px;
+  padding: 15px;
+  background: #fafafa;
+  margin-top: 10px;
+  scrollbar-width: thin;
+  scrollbar-color: #ccc transparent;
 }
 
-.draft-content-scroll::-webkit-scrollbar {
-  width: 6px;
+.drafts-scroll-frame::-webkit-scrollbar {
+  width: 8px;
 }
 
-.draft-content-scroll::-webkit-scrollbar-track {
-  background: #f1f1f1;
-  border-radius: 3px;
+.drafts-scroll-frame::-webkit-scrollbar-track {
+  background: transparent;
 }
 
-.draft-content-scroll::-webkit-scrollbar-thumb {
-  background: #c1c1c1;
-  border-radius: 3px;
+.drafts-scroll-frame::-webkit-scrollbar-thumb {
+  background: #ccc;
+  border-radius: 4px;
 }
 
-.draft-content-scroll::-webkit-scrollbar-thumb:hover {
-  background: #a1a1a1;
+.drafts-scroll-frame::-webkit-scrollbar-thumb:hover {
+  background: #999;
 }
 
-.draft-section {
-  margin-bottom: 16px;
-  padding-bottom: 12px;
+.submission-details {
+  max-height: 0;
+  overflow: hidden;
+  transition: max-height 0.3s ease-out;
+  margin-top: 8px;
+}
+
+.submission-details.expanded {
+  max-height: 400px;
+  overflow: visible;
+}
+
+.submission-item-compact {
   border-bottom: 1px solid #eee;
+  padding: 12px 0;
+  margin-bottom: 8px;
 }
 
-.draft-section:last-child {
-  margin-bottom: 0;
+.submission-item-compact:last-child {
   border-bottom: none;
-  padding-bottom: 0;
+  margin-bottom: 0;
 }
 
-.draft-section h5 {
-  margin: 0 0 6px 0;
+.submission-meta-compact {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.status {
+  padding: 3px 8px;
+  border-radius: 12px;
   font-size: 0.85rem;
-  font-weight: 600;
-  color: #555;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
+  font-weight: 500;
 }
 
-.draft-section p {
-  margin: 0;
-  line-height: 1.4;
+.status.success {
+  background: #d4edda;
+  color: #155724;
+}
+
+.status.warning {
+  background: #fff3cd;
+  color: #856404;
+}
+
+.ai-score {
+  font-size: 0.85rem;
   color: #666;
-}
-
-.draft-section a {
-  color: #007bff;
-  text-decoration: none;
-  word-break: break-all;
-}
-
-.draft-section a:hover {
-  text-decoration: underline;
+  font-weight: 500;
 }
 
 .form-input, .form-textarea, .form-select {
