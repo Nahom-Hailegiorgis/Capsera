@@ -84,6 +84,71 @@ export const supabaseHelper = {
     }
   },
 
+  // ADDED: Create project method stub - needs implementation
+  async createProject(projectData) {
+    console.log("🔧 SUPABASE DEBUG: Creating project", projectData);
+    
+    // TODO: This method needs to be implemented with the actual projects table structure
+    // Expected projectData: { name, user_id, created_by }
+    
+    try {
+      // TODO: Replace with actual table name and structure
+      // const { data, error } = await supabase
+      //   .from("projects")
+      //   .insert([{
+      //     name: projectData.name,
+      //     user_id: projectData.user_id,
+      //     created_by: projectData.created_by,
+      //     created_at: new Date().toISOString()
+      //   }])
+      //   .select()
+      //   .single();
+
+      // if (error) {
+      //   console.error("🔧 SUPABASE DEBUG: Error creating project:", error);
+      //   throw error;
+      // }
+
+      // console.log("🔧 SUPABASE DEBUG: Project created successfully:", data);
+      // return data;
+
+      // Placeholder return until implementation is complete
+      throw new Error("createProject method not yet implemented - needs projects table schema");
+    } catch (error) {
+      console.error("🔧 SUPABASE DEBUG: Error in createProject:", error);
+      throw error;
+    }
+  },
+
+  // ADDED: Get projects by user ID method stub - needs implementation  
+  async getProjectsByUserId(userId) {
+    console.log("🔧 SUPABASE DEBUG: Getting projects for user", userId);
+    
+    // TODO: This method needs to be implemented with the actual projects table structure
+    
+    try {
+      // TODO: Replace with actual table name and structure
+      // const { data, error } = await supabase
+      //   .from("projects")
+      //   .select("*")
+      //   .eq("user_id", userId)
+      //   .order("created_at", { ascending: false });
+
+      // if (error) {
+      //   console.error("🔧 SUPABASE DEBUG: Error fetching projects:", error);
+      //   throw error;
+      // }
+
+      // return data || [];
+
+      // Placeholder return until implementation is complete
+      throw new Error("getProjectsByUserId method not yet implemented - needs projects table schema");
+    } catch (error) {
+      console.error("🔧 SUPABASE DEBUG: Error in getProjectsByUserId:", error);
+      throw error;
+    }
+  },
+
   // Enhanced submitFinalIdea with iteration tracking and orphan prevention
   async submitFinalIdea(submission) {
     console.log("🔧 SUPABASE DEBUG: Submitting final idea", submission);
@@ -110,6 +175,9 @@ export const supabaseHelper = {
             device_id: submission.device_id,
             full_name: submission.full_name,
             user_uuid: userUuid, // Link to user to prevent orphaning
+            // FIXED: Include user_id in submission instead of just user_name
+            user_id: submission.user_id, // ADDED: Include user_id for proper linking
+            project_name: submission.project_name,
             version: submission.version || 3,
             is_final: true,
             ideal_customer_profile: submission.ideal_customer_profile,
