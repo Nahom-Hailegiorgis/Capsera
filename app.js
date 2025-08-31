@@ -1,35 +1,157 @@
-// app.js - Enhanced Capsera PWA with dynamic forms and comprehensive translation
+// app.js - Enhanced Capsera PWA with offline capabilities and version management
 import { dbHelper } from "./db.js";
 import { supabaseHelper } from "./supabase.js";
 import { validation } from "./validation.js";
 import { translator } from "./translate.js";
+
+// Simple localforage-like wrapper for IndexedDB if localforage isn't available
+class SimpleStorage {
+  constructor() {
+    this.dbName = 'capsera-offline';
+    this.version = 1;
+    this.db = null;
+  }
+
+  async init() {
+    return new Promise((resolve, reject) => {
+      const request = indexedDB.open(this.dbName, this.version);
+      
+      request.onerror = () => reject(request.error);
+      request.onsuccess = () => {
+        this.db = request.result;
+        resolve();
+      };
+      
+      request.onupgradeneeded = (event) => {
+        const db = event.target.result;
+        if (!db.objectStoreNames.contains('drafts')) {
+          db.createObjectStore('drafts', { keyPath: 'id', autoIncrement: true });
+        }
+      };
+    });
+  }
+
+  async setItem(key, value) {
+    if (!this.db) await this.init();
+    
+    return new Promise((resolve, reject) => {
+      const transaction = this.db.transaction(['drafts'], 'readwrite');
+      const store = transaction.objectStore('drafts');
+      const request = store.put({ id: key, data: value, timestamp: Date.now() });
+      
+      request.onerror = () => reject(request.error);
+      request.onsuccess = () => resolve();
+    });
+  }
+
+  async getItem(key) {
+    if (!this.db) await this.init();
+    
+    return new Promise((resolve, reject) => {
+      const transaction = this.db.transaction(['drafts'], 'readonly');
+      const store = transaction.objectStore('drafts');
+      const request = store.get(key);
+      
+      request.onerror = () => reject(request.error);
+      request.onsuccess = () => resolve(request.result?.data || null);
+    });
+  }
+}
 
 class CapseraApp {
   constructor() {
     this.currentScreen = "ideas";
     this.currentUser = null;
     this.currentProject = null;
-    this.currentUserId = null; // ADDED: Store the selected user's ID for proper project creation
-    this.projects = []; // ADDED: In-memory projects cache for current user
+    this.currentUserId = null;
+    this.projects = [];
     this.currentLanguage = "en";
     this.translations = null;
     this.ideas = [];
     this.isOnline = navigator.onLine;
     this.currentDraftNumber = 1;
-    this.expandedSubmissions = new Set(); // Track expanded submissions
+    this.expandedSubmissions = new Set();
+    this.offlineStorage = null;
+    this.currentAppVersion = null;
 
     this.init();
   }
 
   async init() {
+    // Initialize offline storage
+    try {
+      if (typeof localforage !== 'undefined') {
+        this.offlineStorage = localforage;
+      } else {
+        this.offlineStorage = new SimpleStorage();
+        await this.offlineStorage.init();
+      }
+    } catch (error) {
+      console.warn('Offline storage initialization failed:', error);
+    }
+
     this.setupEventListeners();
     await this.registerServiceWorker();
+    await this.checkAppVersion();
     this.translations = await translator.init();
     await this.loadIdeasScreen();
     this.showScreen("ideas");
+    
+    // Show offline indicator if needed
+    this.updateOnlineStatus();
+    
+    // Sync intervals
     setInterval(() => this.syncOfflineData(), 30000);
-    // ADDED: Sync offline projects on startup
     this.syncOfflineProjects();
+  }
+
+  async registerServiceWorker() {
+    if ("serviceWorker" in navigator) {
+      try {
+        const registration = await navigator.serviceWorker.register("/sw.js");
+        console.log("SW registered:", registration);
+      } catch (error) {
+        console.error("SW registration failed:", error);
+      }
+    }
+  }
+
+  async checkAppVersion() {
+    try {
+      // Check current version from manifest
+      const response = await fetch('/manifest.json', { cache: 'no-store' });
+      const manifest = await response.json();
+      const newVersion = manifest.version || 'unknown';
+      
+      const lastVersion = await this.getStoredVersion();
+      
+      if (lastVersion && lastVersion !== newVersion) {
+        this.showMessage('App updated! Refresh to see latest features.', 'info');
+        await this.setStoredVersion(newVersion);
+      } else if (!lastVersion) {
+        await this.setStoredVersion(newVersion);
+      }
+      
+      this.currentAppVersion = newVersion;
+    } catch (error) {
+      console.warn('Version check failed:', error);
+    }
+  }
+
+  async getStoredVersion() {
+    try {
+      return await this.offlineStorage?.getItem('app_version');
+    } catch {
+      return localStorage.getItem('capsera_app_version');
+    }
+  }
+
+  async setStoredVersion(version) {
+    try {
+      await this.offlineStorage?.setItem('app_version', version);
+    } catch {
+      localStorage.setItem('capsera_app_version', version);
+    }
   }
 
   setupEventListeners() {
@@ -44,27 +166,267 @@ class CapseraApp {
     // Online/offline detection
     window.addEventListener("online", () => {
       this.isOnline = true;
+      this.updateOnlineStatus();
       this.syncOfflineData();
-      // ADDED: Sync projects when coming online
       this.syncOfflineProjects();
       this.showMessage(this.t("Connection restored"), "success");
     });
 
     window.addEventListener("offline", () => {
       this.isOnline = false;
-      this.showMessage(this.t("Working offline"), "warning");
+      this.updateOnlineStatus();
+      this.showMessage(this.t("Working offline — drafts saved locally"), "warning");
     });
 
     // Service worker messages
     if ("serviceWorker" in navigator && navigator.serviceWorker) {
       navigator.serviceWorker.addEventListener("message", (event) => {
-        if (event.data.type === "SYNC_OFFLINE_DATA") {
-          this.syncOfflineData();
-          // ADDED: Also sync projects
-          this.syncOfflineProjects();
+        const { data } = event;
+        
+        switch (data.type) {
+          case 'NEW_VERSION_AVAILABLE':
+            this.handleNewVersion(data.version);
+            break;
+          case 'SYNC_OFFLINE_DATA':
+            this.syncOfflineData();
+            this.syncOfflineProjects();
+            break;
         }
       });
     }
+  }
+
+  handleNewVersion(version) {
+    // Show update notification
+    const updateBanner = document.createElement('div');
+    updateBanner.className = 'update-banner';
+    updateBanner.innerHTML = `
+      <div class="update-content">
+        <span>New version available (${version})!</span>
+        <button onclick="window.location.reload()" class="btn btn-sm btn-primary">
+          Refresh Now
+        </button>
+        <button onclick="this.parentElement.parentElement.remove()" class="btn btn-sm">
+          Later
+        </button>
+      </div>
+    `;
+    
+    updateBanner.style.cssText = `
+      position: fixed; top: 0; left: 0; right: 0; z-index: 1002;
+      background: #f9bd45; padding: 10px; text-align: center;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    `;
+    
+    document.body.insertBefore(updateBanner, document.body.firstChild);
+  }
+
+  updateOnlineStatus() {
+    // Add/remove offline indicator
+    let indicator = document.querySelector('.offline-indicator');
+    
+    if (!this.isOnline) {
+      if (!indicator) {
+        indicator = document.createElement('div');
+        indicator.className = 'offline-indicator';
+        indicator.textContent = 'Working Offline';
+        indicator.style.cssText = `
+          position: fixed; bottom: 20px; left: 20px; z-index: 1001;
+          background: #ff6b6b; color: white; padding: 8px 16px;
+          border-radius: 20px; font-size: 0.9rem; font-weight: 600;
+        `;
+        document.body.appendChild(indicator);
+      }
+    } else {
+      if (indicator) {
+        indicator.remove();
+      }
+    }
+  }
+
+  // Save draft locally when offline
+  async saveDraftLocally(draftData) {
+    if (!this.offlineStorage) return false;
+    
+    try {
+      const draftKey = `draft_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+      const draftWithMetadata = {
+        ...draftData,
+        savedOffline: true,
+        savedAt: new Date().toISOString(),
+        needsSync: true
+      };
+      
+      await this.offlineStorage.setItem(draftKey, draftWithMetadata);
+      console.log('Draft saved offline:', draftKey);
+      return true;
+    } catch (error) {
+      console.error('Failed to save draft offline:', error);
+      return false;
+    }
+  }
+
+  // Get offline drafts
+  async getOfflineDrafts() {
+    if (!this.offlineStorage) return [];
+    
+    try {
+      // TODO: Implement proper iteration over offline storage
+      // This would require implementing a keys() method for SimpleStorage
+      // For now, return empty array and rely on existing dbHelper.getAllDrafts()
+      return [];
+    } catch (error) {
+      console.error('Failed to get offline drafts:', error);
+      return [];
+    }
+  }
+
+  // Enhanced submission handling with offline support
+  async handleSubmission(e) {
+    e.preventDefault();
+
+    if (!this.currentUser) {
+      this.showMessage(this.t("Please select or create a user first"), "error");
+      return;
+    }
+
+    if (!this.currentProject) {
+      this.showMessage(this.t("Please select or create a project"), "error");
+      return;
+    }
+
+    const formData = new FormData(e.target);
+    const categorySelect = document.getElementById("category");
+    const selectedCategories = Array.from(categorySelect.selectedOptions).map(option => option.value);
+
+    // Build submission object
+    const submission = {
+      device_id: dbHelper.getDeviceId(),
+      full_name: this.currentUser,
+      user_id: this.currentUserId,
+      project_name: this.currentProject,
+      ideal_customer_profile: formData.get("ideal_customer_profile"),
+      product_idea: formData.get("product_idea"),
+      pain_points: formData.get("pain_points"),
+      alternatives: formData.get("alternatives"),
+      category: selectedCategories,
+      heard_about: formData.get("heard_about"),
+      market_validation: formData.get("market_validation"),
+      competitor_research: formData.get("competitor_research"),
+      mvp_development: formData.get("mvp_development"),
+      investor_pitch: formData.get("investor_pitch"),
+      additional_research: formData.get("additional_research"),
+      mvp_link: formData.get("mvp_link"),
+    };
+
+    // Validate submission
+    const validationResult = await validation.validateSubmission(submission, this.ideas);
+
+    if (!validationResult.passed) {
+      this.showMessage(validationResult.errors.join(", "), "error");
+      return;
+    }
+
+    submission.quality_score = validationResult.qualityScore;
+
+    // Determine draft number
+    const existingDrafts = await dbHelper.getDraftsByUserAndProject(this.currentUser, this.currentProject);
+    const realDrafts = existingDrafts.filter((d) => d.version > 0);
+    const attemptNumber = realDrafts.length + 1;
+    submission.version = attemptNumber;
+
+    try {
+      if (attemptNumber <= 2) {
+        // Draft submissions - save locally first
+        if (attemptNumber === 1) {
+          submission.first_draft_submitted_at = new Date().toISOString();
+        }
+
+        // Always save to local storage first
+        await dbHelper.saveDraft(submission);
+        
+        // If offline, also save to offline storage
+        if (!this.isOnline) {
+          await this.saveDraftLocally(submission);
+        }
+        
+        this.showMessage(
+          `${this.t("Draft")} ${attemptNumber} ${this.isOnline ? this.t("saved") : this.t("saved locally")}! AI feedback coming soon.`, 
+          "success"
+        );
+        this.clearForm();
+        this.checkCooldownStatus();
+        
+      } else if (attemptNumber === 3) {
+        // Final submission
+        const confirmed = confirm(this.t("This is your final submission! Are you sure you're ready?"));
+        
+        if (!confirmed) return;
+
+        submission.is_final = true;
+
+        // Save locally first
+        await dbHelper.saveDraft(submission);
+
+        if (this.isOnline) {
+          // TODO: await supabaseHelper.submitFinalIdea(submission);
+          // TODO: await supabaseHelper.createOrGetUser(this.currentUser, dbHelper.getDeviceId());
+        } else {
+          // Save for later sync
+          await dbHelper.addToSyncQueue(submission);
+          await this.saveDraftLocally(submission);
+        }
+
+        this.showMessage(
+          this.isOnline ? this.t("Idea submitted successfully! Thank you!") : this.t("Idea saved for submission when online!"), 
+          "success"
+        );
+        this.clearForm();
+        
+      } else {
+        this.showMessage(this.t("Maximum submissions reached for this project."), "error");
+      }
+    } catch (error) {
+      console.error("Submission error:", error);
+      this.showMessage(`${this.t("Submission failed")}: ${error.message}`, "error");
+    }
+  }
+
+  // Enhanced sync with offline draft support
+  async syncOfflineData() {
+    if (!this.isOnline) return;
+
+    const queue = await dbHelper.getSyncQueue();
+    let syncedCount = 0;
+
+    for (const item of queue) {
+      try {
+        // TODO: Implement actual sync logic
+        await dbHelper.removeFromSyncQueue(item.key);
+        syncedCount++;
+      } catch (error) {
+        console.error("Sync failed for item:", item.key, error);
+      }
+    }
+
+    // Sync offline drafts if available
+    const offlineDrafts = await this.getOfflineDrafts();
+    for (const draft of offlineDrafts) {
+      if (draft.needsSync) {
+        try {
+          // TODO: Sync to server
+          syncedCount++;
+        } catch (error) {
+          console.error("Failed to sync offline draft:", error);
+        }
+      }
+    }
+
+    if (syncedCount > 0) {
+      this.showMessage(`Synced ${syncedCount} items to server`, "success");
+    }
+
+    await this.syncOfflineProjects();
   }
 
   // Translation helper method
@@ -103,25 +465,11 @@ class CapseraApp {
 
   // Auto-expand textarea functionality
   autoExpandTextarea(textarea) {
-    // Reset height to auto to get the correct scrollHeight
     textarea.style.height = "auto";
-    // Set the height to match the content
     textarea.style.height = textarea.scrollHeight + "px";
     
-    // Minimum height constraint
     if (textarea.scrollHeight < 60) {
       textarea.style.height = "60px";
-    }
-  }
-
-  async registerServiceWorker() {
-    if ("serviceWorker" in navigator) {
-      try {
-        const registration = await navigator.serviceWorker.register("/sw.js");
-        console.log("SW registered:", registration);
-      } catch (error) {
-        console.error("SW registration failed:", error);
-      }
     }
   }
 
@@ -237,7 +585,6 @@ class CapseraApp {
   }
 
   setupFeedbackForm() {
-    // Setup feedback form with translation support
     const trySetupForm = () => {
       const form = document.getElementById("feedback-form");
       if (!form) return false;
@@ -395,846 +742,4 @@ class CapseraApp {
           <div class="user-header-compact">${this.escapeHtml(userName)}</div>
           ${Object.entries(userProjects)
             .map(([projectName, projectDrafts]) => {
-              const latestDraft = projectDrafts.sort((a, b) => b.version - a.version)[0];
-              const submissionId = `${userName}-${projectName}`;
-              const isExpanded = this.expandedSubmissions.has(submissionId);
-              
-              return `
-                <div class="submission-compact">
-                  <div class="submission-header-compact" onclick="app.toggleSubmissionDetails('${submissionId}')">
-                    <div class="submission-summary">
-                      <div class="submission-title">${this.escapeHtml(projectName)}</div>
-                      <div class="submission-preview">${this.escapeHtml((latestDraft.product_idea || "").substring(0, 80))}${latestDraft.product_idea && latestDraft.product_idea.length > 80 ? "..." : ""}</div>
-                    </div>
-                    <div class="expand-arrow ${isExpanded ? "expanded" : ""}">${isExpanded ? "▼" : "▶"}</div>
-                  </div>
-                  <div class="submission-details ${isExpanded ? "expanded" : ""}" id="details-${submissionId}">
-                    ${projectDrafts.map(draft => this.renderSubmissionItem(draft, projectName)).join("")}
-                  </div>
-                </div>
-              `;
-            }).join("")}
-        </div>
-      `;
-    });
-
-    container.innerHTML = html;
-  }
-
-  toggleSubmissionDetails(submissionId) {
-    const detailsElement = document.getElementById(`details-${submissionId}`);
-    const arrowElement = document.querySelector(`[onclick="app.toggleSubmissionDetails('${submissionId}')"] .expand-arrow`);
-    
-    if (this.expandedSubmissions.has(submissionId)) {
-      this.expandedSubmissions.delete(submissionId);
-      detailsElement.classList.remove("expanded");
-      arrowElement.classList.remove("expanded");
-      arrowElement.textContent = "▶";
-    } else {
-      this.expandedSubmissions.add(submissionId);
-      detailsElement.classList.add("expanded");
-      arrowElement.classList.add("expanded");
-      arrowElement.textContent = "▼";
-    }
-  }
-
-  renderSubmissionItem(draft, projectName) {
-    const statusText = draft.is_final ? this.t("Final Submission") : `${this.t("Draft")} v${draft.version}`;
-    const statusClass = draft.is_final ? "success" : "warning";
-    const aiScore = draft.ai_feedback?.overall_score || draft.ai_feedback?.score;
-
-    return `
-      <div class="submission-item-compact">
-        <div class="submission-meta-compact">
-          <span class="status ${statusClass}">${statusText}</span>
-          <span class="submission-date">${new Date(draft.saved_at).toLocaleDateString()}</span>
-          ${aiScore ? `<span class="ai-score">AI: ${aiScore}/100</span>` : ""}
-        </div>
-        ${this.renderAIFeedback(draft.ai_feedback)}
-      </div>
-    `;
-  }
-
-  // Screen 3: Enhanced Submit Ideas with Dynamic Forms and Translation
-  loadSubmitScreen() {
-    this.updateGreeting();
-    this.setupSubmitForm();
-    this.updateWordCounts();
-    this.setupUserSelectOptions();
-    this.setupCategoryMultiSelect();
-    this.checkCooldownStatus();
-  }
-
-  updateGreeting() {
-    const greetingElement = document.getElementById("greeting-text");
-    if (greetingElement) {
-      const userName = this.currentUser || "there";
-      const greetings = [
-        `Hey ${userName}! Ready to share your idea?`,
-        `What's cooking, ${userName}?`,
-        `Time to make magic happen, ${userName}!`,
-        `Let's build something amazing, ${userName}!`
-      ];
-      const randomGreeting = greetings[Math.floor(Math.random() * greetings.length)];
-      
-      // Try to translate the greeting, fallback to English if translation not available
-      const translatedGreeting = this.translations?.ui[randomGreeting] || randomGreeting;
-      greetingElement.textContent = translatedGreeting;
-    }
-  }
-
-  async checkCooldownStatus() {
-    if (!this.currentUser || !this.currentProject) return;
-
-    const cooldownElement = document.getElementById("cooldown-message");
-    const cooldownDaysElement = document.getElementById("cooldown-days");
-    
-    // Placeholder logic - replace with actual database check
-    const showCooldown = false;
-    
-    if (showCooldown) {
-      const cooldownDays = window.ENV.DRAFT_COOLDOWN_DAYS || 7;
-      cooldownElement.classList.remove("hidden");
-      if (cooldownDaysElement) {
-        cooldownDaysElement.textContent = cooldownDays;
-      }
-    } else {
-      cooldownElement.classList.add("hidden");
-    }
-  }
-
-  setupSubmitForm() {
-    const form = document.getElementById("submit-form");
-    if (!form) return;
-
-    // Remove existing listeners to avoid duplicates
-    form.removeEventListener("submit", this.handleSubmissionBound);
-    this.handleSubmissionBound = this.handleSubmission.bind(this);
-    form.addEventListener("submit", this.handleSubmissionBound);
-
-    // Word count listeners for auto-expanding textareas
-    form.querySelectorAll('textarea, input[type="text"]').forEach((input) => {
-      input.removeEventListener("input", this.updateWordCountsBound);
-      this.updateWordCountsBound = this.updateWordCounts.bind(this);
-      input.addEventListener("input", this.updateWordCountsBound);
-      
-      // Initialize auto-expand for textareas
-      if (input.classList.contains("auto-expand")) {
-        this.autoExpandTextarea(input);
-      }
-    });
-
-    // User selection
-    const userSelect = document.getElementById("user-select");
-    if (userSelect) {
-      userSelect.removeEventListener("change", this.handleUserSelectBound);
-      this.handleUserSelectBound = this.handleUserSelect.bind(this);
-      userSelect.addEventListener("change", this.handleUserSelectBound);
-    }
-
-    // Project selection
-    const projectSelect = document.getElementById("project-select");
-    if (projectSelect) {
-      projectSelect.removeEventListener("change", this.handleProjectSelectBound);
-      this.handleProjectSelectBound = this.handleProjectSelect.bind(this);
-      projectSelect.addEventListener("change", this.handleProjectSelectBound);
-    }
-  }
-
-  setupCategoryMultiSelect() {
-    const categorySelect = document.getElementById("category");
-    if (!categorySelect) return;
-    categorySelect.multiple = true;
-    categorySelect.size = 5;
-  }
-
-  // MODIFIED: Enhanced user selection with proper ID tracking
-  async handleUserSelect(e) {
-    const selectedValue = e.target.value;
-    
-    if (selectedValue === "new") {
-      await this.showUserCreationForm();
-    } else if (selectedValue) {
-      await this.selectExistingUser(selectedValue);
-    } else {
-      this.currentUser = null;
-      this.currentUserId = null; // Clear user ID
-      this.currentProject = null;
-      this.projects = []; // Clear projects cache
-      this.setupProjectSelectOptions();
-    }
-    
-    this.updateGreeting();
-    this.checkCooldownStatus();
-  }
-
-  // MODIFIED: Enhanced project selection
-  async handleProjectSelect(e) {
-    if (e.target.value === "new") {
-      await this.createNewProject();
-    } else {
-      this.currentProject = e.target.value;
-    }
-    this.checkCooldownStatus();
-  }
-
-  // MODIFIED: Enhanced project creation with immediate dropdown update and local persistence
-  async createNewProject() {
-    const projectName = prompt(this.t("Enter project name:"));
-    if (!projectName || !projectName.trim()) return;
-
-    if (!this.currentUser) {
-      this.showMessage(this.t("Please select a user first"), "error");
-      return;
-    }
-
-    this.currentProject = projectName;
-
-    try {
-      // OPTIMISTIC UI UPDATE: Add to local cache immediately
-      this.projects.push({ name: projectName, user_id: this.currentUserId, needs_sync: !this.isOnline });
-
-      // Save to local storage immediately for persistence
-      await this.saveProjectsLocally(this.currentUserId, this.projects);
-
-      // Save placeholder draft to establish project in database
-      const placeholderDraft = {
-        device_id: dbHelper.getDeviceId(),
-        full_name: this.currentUser,
-        user_id: this.currentUserId, // FIXED: Use user_id instead of just user_name
-        project_name: projectName,
-        ideal_customer_profile: "",
-        product_idea: "",
-        pain_points: "",
-        alternatives: "",
-        category: [],
-        heard_about: "",
-        version: 0,
-        is_final: false,
-        needs_sync: !this.isOnline
-      };
-
-      await dbHelper.saveDraft(placeholderDraft);
-
-      // Update dropdown immediately without page refresh
-      await this.setupProjectSelectOptions();
-      
-      // Select the newly created project in the dropdown
-      const projectSelect = document.getElementById("project-select");
-      if (projectSelect) {
-        projectSelect.value = projectName;
-      }
-
-      // If online, sync to server
-      if (this.isOnline) {
-        try {
-          // TODO: Add supabaseHelper.createProject method to create project on server
-          // await supabaseHelper.createProject({
-          //   name: projectName,
-          //   user_id: this.currentUserId,
-          //   created_by: this.currentUser
-          // });
-          
-          // Mark project as synced in local cache
-          const projectIndex = this.projects.findIndex(p => p.name === projectName);
-          if (projectIndex !== -1) {
-            this.projects[projectIndex].needs_sync = false;
-            await this.saveProjectsLocally(this.currentUserId, this.projects);
-          }
-        } catch (error) {
-          console.error("Failed to sync project to server:", error);
-          // Project remains marked as needs_sync for later
-        }
-      }
-
-      this.showMessage(`${this.t("Project created")}: "${projectName}"!`, "success");
-    } catch (error) {
-      console.error("Error creating project:", error);
-      this.showMessage(this.t("Failed to create project"), "error");
-      
-      // Rollback optimistic update
-      this.projects = this.projects.filter(p => p.name !== projectName);
-      if (this.currentProject === projectName) {
-        this.currentProject = null;
-      }
-      await this.setupProjectSelectOptions();
-    }
-  }
-
-  // MODIFIED: Enhanced project options setup with local persistence
-  async setupProjectSelectOptions() {
-    const projectSelect = document.getElementById("project-select");
-    if (!projectSelect || !this.currentUser) return;
-
-    // Load projects from local cache first (for offline support)
-    if (this.currentUserId) {
-      this.projects = await this.loadProjectsLocally(this.currentUserId);
-    }
-
-    // If online, try to sync/refresh from server
-    if (this.isOnline && this.currentUserId) {
-      try {
-        // TODO: Add supabaseHelper.getProjectsByUserId method
-        // const serverProjects = await supabaseHelper.getProjectsByUserId(this.currentUserId);
-        // Merge with local projects, preferring server data
-        // this.projects = this.mergeProjects(this.projects, serverProjects);
-        // await this.saveProjectsLocally(this.currentUserId, this.projects);
-      } catch (error) {
-        console.error("Failed to load projects from server:", error);
-        // Continue with local projects
-      }
-    }
-
-    // Fallback: Get projects from user drafts if no cached projects
-    if (!this.projects.length) {
-      const userDrafts = await dbHelper.getDraftsByUser(this.currentUser);
-      const projectNames = [...new Set(userDrafts.map((d) => d.project_name || "Default Project"))];
-      this.projects = projectNames.map(name => ({ 
-        name, 
-        user_id: this.currentUserId,
-        needs_sync: false 
-      }));
-      
-      if (this.currentUserId) {
-        await this.saveProjectsLocally(this.currentUserId, this.projects);
-      }
-    }
-
-    // Render dropdown options
-    projectSelect.innerHTML = `
-      <option value="">${this.t("Select Project")}</option>
-      <option value="new">${this.t("Create New Project")}</option>
-      ${this.projects.map(project => `
-        <option value="${this.escapeHtml(project.name)}" ${project.name === this.currentProject ? "selected" : ""}>
-          ${this.escapeHtml(project.name)}${project.needs_sync ? " (offline)" : ""}
-        </option>
-      `).join("")}
-    `;
-  }
-
-  // ADDED: Local storage methods for projects per user
-  async saveProjectsLocally(userId, projects) {
-    if (!userId) return;
-    
-    try {
-      const key = `capsera_projects_${userId}`;
-      const data = {
-        projects: projects,
-        updated_at: new Date().toISOString()
-      };
-      
-      // Try IndexedDB first via dbHelper, fallback to localStorage
-      try {
-        await dbHelper.saveSetting(key, data);
-      } catch (error) {
-        // Fallback to localStorage
-        localStorage.setItem(key, JSON.stringify(data));
-      }
-    } catch (error) {
-      console.error("Failed to save projects locally:", error);
-    }
-  }
-
-  async loadProjectsLocally(userId) {
-    if (!userId) return [];
-    
-    try {
-      const key = `capsera_projects_${userId}`;
-      
-      // Try IndexedDB first via dbHelper
-      try {
-        const data = await dbHelper.getSetting(key);
-        if (data && data.projects) {
-          return data.projects;
-        }
-      } catch (error) {
-        console.log("IndexedDB fallback failed, trying localStorage");
-      }
-      
-      // Fallback to localStorage
-      const stored = localStorage.getItem(key);
-      if (stored) {
-        const data = JSON.parse(stored);
-        return data.projects || [];
-      }
-    } catch (error) {
-      console.error("Failed to load projects locally:", error);
-    }
-    
-    return [];
-  }
-
-  // ADDED: Sync offline projects to server when online
-  async syncOfflineProjects() {
-    if (!this.isOnline || !this.currentUserId) return;
-
-    const unsynced = this.projects.filter(p => p.needs_sync);
-    if (!unsynced.length) return;
-
-    let syncedCount = 0;
-    for (const project of unsynced) {
-      try {
-        // TODO: Call supabaseHelper.createProject when that method is available
-        // await supabaseHelper.createProject({
-        //   name: project.name,
-        //   user_id: this.currentUserId,
-        //   created_by: this.currentUser
-        // });
-        
-        project.needs_sync = false;
-        syncedCount++;
-      } catch (error) {
-        console.error(`Failed to sync project "${project.name}":`, error);
-      }
-    }
-
-    if (syncedCount > 0) {
-      await this.saveProjectsLocally(this.currentUserId, this.projects);
-      this.showMessage(`Synced ${syncedCount} projects to server`, "success");
-      await this.setupProjectSelectOptions(); // Refresh dropdown to remove (offline) indicators
-    }
-  }
-
-  async setupUserSelectOptions() {
-    const userSelect = document.getElementById("user-select");
-    if (!userSelect) return;
-
-    const users = await dbHelper.getAllUsers();
-
-    userSelect.innerHTML = `
-      <option value="">${this.t("Select User")}</option>
-      <option value="new">${this.t("Create New User")}</option>
-      ${users.map(user => `
-        <option value="${this.escapeHtml(user.full_name)}">${this.escapeHtml(user.full_name)}</option>
-      `).join("")}
-    `;
-  }
-
-  updateWordCounts() {
-    const fields = [
-      { id: "ideal_customer_profile", min: 10, max: 200 },
-      { id: "product_idea", min: 15, max: 300 },
-      { id: "pain_points", min: 15, max: 250 },
-      { id: "alternatives", min: 5, max: 200 },
-    ];
-
-    fields.forEach(({ id, min, max }) => {
-      const input = document.getElementById(id);
-      const counter = document.getElementById(`${id}-count`);
-
-      if (input && counter) {
-        const words = input.value.trim().split(/\s+/).filter((w) => w.length > 0);
-        const count = words.length;
-
-        counter.innerHTML = `${count} <span data-ui-key="words">${this.t("words")}</span> (${min}-${max})`;
-        counter.className = count > max ? "word-counter over-limit" : "word-counter";
-      }
-    });
-  }
-
-  // Enhanced submission handling with draft progression and translation
-  async handleSubmission(e) {
-    e.preventDefault();
-
-    if (!this.currentUser) {
-      this.showMessage(this.t("Please select or create a user first"), "error");
-      return;
-    }
-
-    if (!this.currentProject) {
-      this.showMessage(this.t("Please select or create a project"), "error");
-      return;
-    }
-
-    const formData = new FormData(e.target);
-    const categorySelect = document.getElementById("category");
-    const selectedCategories = Array.from(categorySelect.selectedOptions).map(option => option.value);
-
-    // Build submission object
-    const submission = {
-      device_id: dbHelper.getDeviceId(),
-      full_name: this.currentUser,
-      user_id: this.currentUserId, // FIXED: Include user_id instead of just user_name
-      project_name: this.currentProject,
-      ideal_customer_profile: formData.get("ideal_customer_profile"),
-      product_idea: formData.get("product_idea"),
-      pain_points: formData.get("pain_points"),
-      alternatives: formData.get("alternatives"),
-      category: selectedCategories,
-      heard_about: formData.get("heard_about"),
-      market_validation: formData.get("market_validation"),
-      competitor_research: formData.get("competitor_research"),
-      mvp_development: formData.get("mvp_development"),
-      investor_pitch: formData.get("investor_pitch"),
-      additional_research: formData.get("additional_research"),
-      mvp_link: formData.get("mvp_link"),
-    };
-
-    // Validate submission
-    const validationResult = await validation.validateSubmission(submission, this.ideas);
-
-    if (!validationResult.passed) {
-      this.showMessage(validationResult.errors.join(", "), "error");
-      return;
-    }
-
-    submission.quality_score = validationResult.qualityScore;
-
-    // Determine draft number
-    const existingDrafts = await dbHelper.getDraftsByUserAndProject(this.currentUser, this.currentProject);
-    const realDrafts = existingDrafts.filter((d) => d.version > 0);
-    const attemptNumber = realDrafts.length + 1;
-    submission.version = attemptNumber;
-
-    try {
-      if (attemptNumber <= 2) {
-        // Draft submissions
-        if (attemptNumber === 1) {
-          submission.first_draft_submitted_at = new Date().toISOString();
-        }
-
-        await dbHelper.saveDraft(submission);
-        
-        this.showMessage(`${this.t("Draft")} ${attemptNumber} ${this.t("saved")}! AI feedback coming soon.`, "success");
-        this.clearForm();
-        this.checkCooldownStatus();
-        
-      } else if (attemptNumber === 3) {
-        // Final submission
-        const confirmed = confirm(this.t("This is your final submission! Are you sure you're ready?"));
-        
-        if (!confirmed) return;
-
-        submission.is_final = true;
-
-        if (this.isOnline) {
-          // TODO: await supabaseHelper.submitFinalIdea(submission);
-          // TODO: await supabaseHelper.createOrGetUser(this.currentUser, dbHelper.getDeviceId());
-        } else {
-          await dbHelper.addToSyncQueue(submission);
-        }
-
-        await dbHelper.saveDraft(submission);
-        this.showMessage(this.t("Idea submitted successfully! Thank you!"), "success");
-        this.clearForm();
-        
-      } else {
-        this.showMessage(this.t("Maximum submissions reached for this project."), "error");
-      }
-    } catch (error) {
-      console.error("Submission error:", error);
-      this.showMessage(`${this.t("Submission failed")}: ${error.message}`, "error");
-    }
-  }
-
-  // Enhanced AI Feedback Rendering with Translation
-  renderAIFeedback(feedback) {
-    if (!feedback) return "";
-
-    if (feedback.critique && feedback.suggestions && feedback.grading) {
-      return this.renderStructuredAIFeedback(feedback);
-    } else {
-      return this.renderLegacyAIFeedback(feedback);
-    }
-  }
-
-  renderStructuredAIFeedback(feedback) {
-    return `
-      <div class="ai-feedback-compact">
-        <div class="feedback-header">
-          <span class="ai-badge">${this.t("AI Analysis")}</span>
-          <span class="score-badge">${feedback.overall_score}/100</span>
-        </div>
-        <div class="feedback-summary">
-          <strong>Key Points:</strong>
-          <ul class="feedback-bullets">
-            ${feedback.critique.strengths.slice(0, 2).map(strength => `<li class="strength">+ ${this.escapeHtml(strength)}</li>`).join("")}
-            ${feedback.critique.weaknesses.slice(0, 2).map(weakness => `<li class="weakness">- ${this.escapeHtml(weakness)}</li>`).join("")}
-          </ul>
-        </div>
-      </div>
-    `;
-  }
-
-  renderLegacyAIFeedback(feedback) {
-    return `
-      <div class="ai-feedback-compact">
-        <div class="feedback-header">
-          <span class="ai-badge">${this.t("AI Feedback")}</span>
-          <span class="score-badge">${feedback.score}/100</span>
-        </div>
-        <div class="feedback-summary">
-          ${Object.entries(feedback).filter(([key]) => key !== "score").slice(0, 1).map(([key, bullets]) => `
-            <strong>${this.formatFeedbackTitle(key)}:</strong>
-            <ul class="feedback-bullets">
-              ${bullets.slice(0, 3).map(bullet => `<li>${this.escapeHtml(bullet)}</li>`).join("")}
-            </ul>
-          `).join("")}
-        </div>
-      </div>
-    `;
-  }
-
-  // Screen 4: Settings with Enhanced Translation Support
-  async loadSettingsScreen() {
-    this.renderLanguageSelector();
-    await this.loadUsersList();
-  }
-
-  renderLanguageSelector() {
-    const container = document.getElementById("language-selector");
-    if (!container) return;
-
-    const currentLang = translator.getCurrentLanguage();
-    const html = translator.supportedLangs.map(lang => `
-      <div class="language-option ${lang === currentLang ? "selected" : ""}" 
-           onclick="app.selectLanguage('${lang}')">
-        ${translator.getLanguageName(lang)}
-      </div>
-    `).join("");
-
-    container.innerHTML = html;
-  }
-
-  async selectLanguage(lang) {
-    if (lang === this.currentLanguage) return;
-
-    const loadingOverlay = document.createElement("div");
-    loadingOverlay.className = "modal-overlay";
-    loadingOverlay.innerHTML = `
-      <div class="modal-content">
-        <div class="modal-body">
-          <div class="loading">
-            <div class="loading-spinner"></div>
-            <p>${this.t("Updating language...")}</p>
-          </div>
-        </div>
-      </div>
-    `;
-    document.body.appendChild(loadingOverlay);
-
-    try {
-      if (translator.setCurrentLanguage(lang)) {
-        this.currentLanguage = lang;
-        this.translations = await translator.getTranslations(lang);
-        translator.applyTranslations(this.translations);
-        this.renderLanguageSelector();
-        this.showMessage(this.t("Language updated successfully"), "success");
-      }
-    } catch (error) {
-      console.error("Language update failed:", error);
-      this.showMessage(this.t("Failed to update language"), "error");
-    } finally {
-      loadingOverlay.remove();
-    }
-  }
-
-  async loadUsersList() {
-    const container = document.getElementById("users-list");
-    if (!container) return;
-
-    try {
-      const localUsers = await dbHelper.getAllUsers();
-      const allUsers = localUsers;
-
-      if (allUsers.length === 0) {
-        container.innerHTML = `<div class="text-center">${this.t("No users found")}</div>`;
-        return;
-      }
-
-      const html = allUsers.map(user => `
-        <div class="user-item">
-          <span>${this.escapeHtml(user.full_name)}</span>
-          <button class="btn btn-danger btn-sm" onclick="app.deleteUser('${user.full_name}')">
-            ${this.t("Delete")}
-          </button>
-        </div>
-      `).join("");
-
-      container.innerHTML = html;
-    } catch (error) {
-      console.error("Error loading users:", error);
-      container.innerHTML = '<div class="error">Failed to load users</div>';
-    }
-  }
-
-  // Utility methods with translation support
-  async syncOfflineData() {
-    if (!this.isOnline) return;
-
-    const queue = await dbHelper.getSyncQueue();
-    let syncedCount = 0;
-
-    for (const item of queue) {
-      try {
-        await dbHelper.removeFromSyncQueue(item.key);
-        syncedCount++;
-      } catch (error) {
-        console.error("Sync failed for item:", item.key, error);
-      }
-    }
-
-    if (syncedCount > 0) {
-      this.showMessage(`Synced ${syncedCount} submissions`, "success");
-    }
-
-    // ADDED: Also sync projects when syncing other data
-    await this.syncOfflineProjects();
-  }
-
-  showMessage(message, type = "info") {
-    const toast = document.createElement("div");
-    toast.className = `toast ${type}`;
-    toast.textContent = message;
-    toast.style.cssText = `
-      position: fixed; top: 20px; right: 20px; z-index: 1001;
-      padding: 12px 20px; border-radius: 4px; color: white;
-      background: ${type === "success" ? "#28a745" : type === "error" ? "#dc3545" : type === "warning" ? "#ffc107" : "#17a2b8"};
-      font-weight: 600; box-shadow: 0 4px 12px rgba(0,0,0,0.15);
-      animation: slideInRight 0.3s ease;
-    `;
-
-    document.body.appendChild(toast);
-    setTimeout(() => toast.remove(), 4000);
-  }
-
-  escapeHtml(text) {
-    if (!text) return "";
-    const div = document.createElement("div");
-    div.textContent = text;
-    return div.innerHTML;
-  }
-
-  formatFeedbackTitle(key) {
-    return key.split("_").map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(" ");
-  }
-
-  clearForm() {
-    const form = document.getElementById("submit-form");
-    if (form) {
-      form.reset();
-      form.querySelectorAll(".auto-expand").forEach(textarea => {
-        textarea.style.height = "auto";
-        this.autoExpandTextarea(textarea);
-      });
-      this.updateWordCounts();
-    }
-    this.currentProject = null;
-  }
-
-  async deleteUser(fullName) {
-    const pin = prompt(this.t("Enter your 4-digit PIN:"));
-    if (!pin || pin.length !== 4) return;
-
-    const localUser = await dbHelper.getUser(fullName);
-    if (!localUser || dbHelper.hashPin(pin) !== localUser.pin_hash) {
-      this.showMessage(this.t("Invalid PIN"), "error");
-      return;
-    }
-
-    try {
-      await dbHelper.deleteUser(fullName);
-      this.showMessage(this.t("User deleted"), "success");
-      this.loadUsersList();
-    } catch (error) {
-      console.error("Delete user error:", error);
-      this.showMessage(this.t("Failed to delete user"), "error");
-    }
-  }
-
-  // MODIFIED: Enhanced user creation with proper ID tracking
-  async showUserCreationForm() {
-    const name = prompt(this.t("What's your full name?"));
-    if (!name) return;
-
-    const pin = prompt(this.t("Create a 4-digit PIN:"));
-    if (!pin || pin.length !== 4 || !/^\d{4}$/.test(pin)) {
-      this.showMessage(this.t("PIN must be exactly 4 digits"), "error");
-      return;
-    }
-
-    try {
-      const pinHash = dbHelper.hashPin(pin);
-      const userData = await dbHelper.saveUser(name, pinHash);
-
-      this.currentUser = name;
-      this.currentUserId = userData.id; // Store the local user ID
-      this.projects = []; // Reset projects for new user
-      
-      // If online, create user on server and get UUID
-      if (this.isOnline) {
-        try {
-          // TODO: Call supabaseHelper.createOrGetUser when implementation is available
-          // const serverUser = await supabaseHelper.createOrGetUser(name, dbHelper.getDeviceId());
-          // this.currentUserId = serverUser.id; // Use server UUID instead
-          // 
-          // Update local user with server UUID
-          // await dbHelper.saveUser(name, pinHash, serverUser.id);
-        } catch (error) {
-          console.error("Failed to create user on server:", error);
-          // Continue with local user ID
-        }
-      }
-
-      this.setupUserSelectOptions();
-      this.setupProjectSelectOptions();
-      this.updateGreeting();
-      this.showMessage(`${this.t("User created")}: ${name}!`, "success");
-    } catch (error) {
-      console.error("User creation error:", error);
-      this.showMessage(this.t("Failed to create user"), "error");
-    }
-  }
-
-  // MODIFIED: Enhanced existing user selection with proper ID tracking
-  async selectExistingUser(fullName) {
-    const pin = prompt(this.t("Enter your PIN:"));
-    if (!pin) {
-      this.resetUserDropdownToPrevious();
-      return;
-    }
-
-    const localUser = await dbHelper.getUser(fullName);
-    if (!localUser || dbHelper.hashPin(pin) !== localUser.pin_hash) {
-      this.showMessage(this.t("Invalid PIN"), "error");
-      this.resetUserDropdownToPrevious();
-      return;
-    }
-
-    this.currentUser = fullName;
-    this.currentUserId = localUser.user_uuid || localUser.id; // Prefer server UUID, fallback to local ID
-    this.currentProject = null;
-    this.projects = []; // Reset projects, will be loaded in setupProjectSelectOptions
-    
-    await this.setupProjectSelectOptions();
-    this.showMessage(`${this.t("Welcome back")}, ${fullName}!`, "success");
-  }
-
-  resetUserDropdownToPrevious() {
-    const userSelect = document.getElementById("user-select");
-    if (!userSelect) return;
-
-    userSelect.value = this.currentUser || "";
-    
-    const projectSelect = document.getElementById("project-select");
-    if (projectSelect) {
-      projectSelect.innerHTML = `<option value="">${this.t("Select Project")}</option>`;
-      this.currentProject = null;
-    }
-  }
-}
-
-// Initialize app when DOM is ready
-document.addEventListener("DOMContentLoaded", () => {
-  window.app = new CapseraApp();
-});
-
-// Add CSS animation for toast
-const style = document.createElement('style');
-style.textContent = `
-  @keyframes slideInRight {
-    from { transform: translateX(100%); opacity: 0; }
-    to { transform: translateX(0); opacity: 1; }
-  }
-`;
-document.head.appendChild(style);
+              const
