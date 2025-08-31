@@ -1,7 +1,7 @@
 {
   "name": "Capsera - Idea Submission Platform",
   "short_name": "Capsera",
-  "description": "Submit and discover innovative product ideas",
+  "description": "Submit and discover innovative product ideas - works offline!",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#ffffff",
@@ -9,18 +9,52 @@
   "orientation": "portrait-primary",
   "scope": "/",
   "lang": "en",
+  "categories": ["productivity", "business"],
+  "prefer_related_applications": false,
   "icons": [
     {
       "src": "/public/logo.png",
       "sizes": "192x192",
-      "type": "image/svg+xml"
+      "type": "image/png",
+      "purpose": "any maskable"
     },
     {
       "src": "/public/logo.png",
       "sizes": "512x512",
-      "type": "image/svg+xml"
+      "type": "image/png",
+      "purpose": "any maskable"
     }
   ],
-  "categories": ["productivity", "business"],
-  "prefer_related_applications": false
+  "shortcuts": [
+    {
+      "name": "Submit New Idea",
+      "short_name": "Submit",
+      "description": "Quickly submit a new product idea",
+      "url": "/?screen=submit",
+      "icons": [{ "src": "/public/logo.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "My Submissions",
+      "short_name": "Submissions",
+      "description": "View your submitted ideas",
+      "url": "/?screen=submissions",
+      "icons": [{ "src": "/public/logo.png", "sizes": "192x192" }]
+    }
+  ],
+  "screenshots": [
+    {
+      "src": "/public/screenshot-narrow.png",
+      "sizes": "540x720",
+      "type": "image/png",
+      "form_factor": "narrow"
+    },
+    {
+      "src": "/public/screenshot-wide.png",
+      "sizes": "720x540",
+      "type": "image/png",
+      "form_factor": "wide"
+    }
+  ],
+  "related_applications": [],
+  "offline_enabled": true
 }
