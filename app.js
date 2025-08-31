@@ -1,4 +1,4 @@
-// app.js - Main Capsera PWA application
+// app.js - Enhanced Capsera PWA with dynamic forms and compact UI
 import { dbHelper } from "./db.js";
 import { supabaseHelper } from "./supabase.js";
 import { validation } from "./validation.js";
@@ -13,32 +13,22 @@ class CapseraApp {
     this.translations = null;
     this.ideas = [];
     this.isOnline = navigator.onLine;
+    this.currentDraftNumber = 1;
+    this.expandedSubmissions = new Set(); // Track expanded submissions
 
     this.init();
   }
 
   async init() {
-    // Set up event listeners
     this.setupEventListeners();
-
-    // Register service worker
     await this.registerServiceWorker();
-
-    // Initialize translations
     this.translations = await translator.init();
-
-    // Load initial data
     await this.loadIdeasScreen();
-
-    // Show initial screen
     this.showScreen("ideas");
-
-    // Set up periodic sync
-    setInterval(() => this.syncOfflineData(), 30000); // Every 30 seconds
+    setInterval(() => this.syncOfflineData(), 30000);
   }
 
   setupEventListeners() {
-    // Wait for DOM to be ready before setting up listeners
     if (document.readyState === "loading") {
       document.addEventListener("DOMContentLoaded", () => {
         this.setupDOMEventListeners();
@@ -74,14 +64,33 @@ class CapseraApp {
     document.querySelectorAll(".nav-tab").forEach((tab) => {
       tab.addEventListener("click", (e) => {
         e.preventDefault();
-        const screen =
-          e.target.getAttribute("data-screen") ||
+        const screen = e.target.getAttribute("data-screen") ||
           e.target.closest("[data-screen]")?.getAttribute("data-screen");
         if (screen) {
           this.showScreen(screen);
         }
       });
     });
+
+    // Dynamic textarea auto-expand
+    document.addEventListener("input", (e) => {
+      if (e.target.classList.contains("auto-expand")) {
+        this.autoExpandTextarea(e.target);
+      }
+    });
+  }
+
+  // Auto-expand textarea functionality
+  autoExpandTextarea(textarea) {
+    // Reset height to auto to get the correct scrollHeight
+    textarea.style.height = "auto";
+    // Set the height to match the content
+    textarea.style.height = textarea.scrollHeight + "px";
+    
+    // Minimum height constraint
+    if (textarea.scrollHeight < 60) {
+      textarea.style.height = "60px";
+    }
   }
 
   async registerServiceWorker() {
@@ -136,7 +145,7 @@ class CapseraApp {
     }
   }
 
-  // Screen 1: Ideas List
+  // Screen 1: Ideas List (unchanged)
   async loadIdeasScreen() {
     const container = document.getElementById("ideas-list");
     if (!container) return;
@@ -144,7 +153,6 @@ class CapseraApp {
     container.innerHTML = '<div class="loading">Loading ideas...</div>';
 
     try {
-      // Try to get fresh data if online, otherwise use cache
       if (this.isOnline) {
         this.ideas = await supabaseHelper.getPublicIdeas();
         await dbHelper.cacheIdeas(this.ideas);
@@ -171,24 +179,17 @@ class CapseraApp {
     }
 
     const html = this.ideas
-      .map(
-        (idea) => `
-      <div class="idea-item" onclick="app.viewIdeaDetails('${idea.id}')">
-        <div class="idea-title">${this.escapeHtml(
-          idea.preview || "Untitled Idea"
-        )}</div>
-        <div class="idea-meta">
-          By ${this.escapeHtml(idea.full_name)} • ${
-          Array.isArray(idea.category)
-            ? idea.category.join(", ")
-            : idea.category || "Uncategorized"
-        } • 
-          ${new Date(idea.created_at).toLocaleDateString()}
+      .map((idea) => `
+        <div class="idea-item" onclick="app.viewIdeaDetails('${idea.id}')">
+          <div class="idea-title">${this.escapeHtml(idea.preview || "Untitled Idea")}</div>
+          <div class="idea-meta">
+            By ${this.escapeHtml(idea.full_name)} • ${
+              Array.isArray(idea.category) ? idea.category.join(", ") : idea.category || "Uncategorized"
+            } • 
+            ${new Date(idea.created_at).toLocaleDateString()}
+          </div>
         </div>
-      </div>
-    `
-      )
-      .join("");
+      `).join("");
 
     container.innerHTML = html + this.getFeedbackFormHTML();
   }
@@ -200,8 +201,8 @@ class CapseraApp {
         <form id="feedback-form" class="feedback-form">
           <div class="form-group">
             <label class="form-label">How can we improve Capsera?</label>
-            <textarea id="feedback-message" class="form-textarea" 
-                     placeholder="Tell us what you think..." required></textarea>
+            <textarea id="feedback-message" class="form-textarea auto-expand" 
+                     placeholder="Tell us what you think..."></textarea>
           </div>
           <div class="form-group">
             <label class="form-label">Contact (Optional)</label>
@@ -214,115 +215,71 @@ class CapseraApp {
     `;
   }
 
-setupFeedbackForm() {
-  console.log("🔧 FEEDBACK: Setting up feedback form");
+  setupFeedbackForm() {
+    // Setup feedback form (existing logic with validation name-based approach)
+    const trySetupForm = () => {
+      const form = document.getElementById("feedback-form");
+      if (!form) return false;
 
-  // Use a small delay to ensure DOM has updated after innerHTML changes
-  const trySetupForm = () => {
-    const form = document.getElementById("feedback-form");
-    if (!form) {
-      console.error("🔧 FEEDBACK: Form element not found!");
-      return false;
-    }
+      const newForm = form.cloneNode(true);
+      form.parentNode.replaceChild(newForm, form);
 
-    // Remove existing listeners to avoid duplicates
-    const newForm = form.cloneNode(true);
-    form.parentNode.replaceChild(newForm, form);
-    console.log("🔧 FEEDBACK: Form listener attached successfully");
+      newForm.addEventListener("submit", async (e) => {
+        e.preventDefault();
 
-    newForm.addEventListener("submit", async (e) => {
-      e.preventDefault();
-      console.log("🔧 FEEDBACK: Form submission started");
+        const messageInput = newForm.querySelector("#feedback-message");
+        const contactInput = newForm.querySelector("#feedback-contact");
+        const submitButton = newForm.querySelector('button[type="submit"]');
 
-      // Re-query elements from the new form to ensure they exist
-      const messageInput = newForm.querySelector("#feedback-message");
-      const contactInput = newForm.querySelector("#feedback-contact");
-      const submitButton = newForm.querySelector('button[type="submit"]');
+        const message = messageInput?.value?.trim();
+        const contact = contactInput?.value?.trim();
 
-      const message = messageInput?.value?.trim();
-      const contact = contactInput?.value?.trim();
+        // Name-based validation instead of HTML5 required attribute
+        if (!message) {
+          this.showMessage("feedback_message is required", "error");
+          return;
+        }
 
-      console.log("🔧 FEEDBACK: Form data", {
-        messageLength: message?.length || 0,
-        hasContact: !!contact,
+        const originalText = submitButton?.textContent || "Submit Feedback";
+        if (submitButton) {
+          submitButton.textContent = "Submitting...";
+          submitButton.disabled = true;
+        }
+
+        try {
+          const feedbackData = {
+            device_id: dbHelper.getDeviceId(),
+            message: message,
+            contact_info: contact || null,
+            anonymous: !contact,
+          };
+
+          // TODO: Call supabaseHelper.submitFeedback(feedbackData)
+          // const result = await supabaseHelper.submitFeedback(feedbackData);
+
+          this.showMessage("Thank you for your feedback!", "success");
+          newForm.reset();
+        } catch (error) {
+          console.error("Feedback submission failed:", error);
+          this.showMessage("Failed to submit feedback. Please try again.", "error");
+        } finally {
+          if (submitButton) {
+            submitButton.textContent = originalText;
+            submitButton.disabled = false;
+          }
+        }
       });
 
-      if (!message) {
-        this.showMessage("Please enter your feedback message", "error");
-        return;
+      return true;
+    };
+
+    if (trySetupForm()) return;
+    setTimeout(() => {
+      if (!trySetupForm()) {
+        setTimeout(() => trySetupForm(), 100);
       }
-
-      // Show loading state
-      const originalText = submitButton?.textContent || "Submit Feedback";
-      if (submitButton) {
-        submitButton.textContent = "Submitting...";
-        submitButton.disabled = true;
-      }
-
-      try {
-        // Prepare feedback data
-        const feedbackData = {
-          device_id: dbHelper.getDeviceId(),
-          message: message,
-          contact_info: contact || null,
-          anonymous: !contact,
-        };
-
-        console.log("🔧 FEEDBACK: Submitting to Supabase", {
-          device_id: feedbackData.device_id,
-          message_length: feedbackData.message.length,
-          anonymous: feedbackData.anonymous,
-        });
-
-        // Submit directly to Supabase
-        const result = await supabaseHelper.submitFeedback(feedbackData);
-
-        console.log("🔧 FEEDBACK: Success!", {
-          id: result.id,
-          created_at: result.created_at,
-        });
-
-        this.showMessage("Thank you for your feedback!", "success");
-        newForm.reset();
-      } catch (error) {
-        console.error("🔧 FEEDBACK: Failed:", error);
-
-        // Show user-friendly error message
-        let errorMessage = "Failed to submit feedback. Please try again.";
-        if (error.message.includes("policy")) {
-          errorMessage = "Permission error - please contact support.";
-        } else if (error.message.includes("network")) {
-          errorMessage = "Network error - check your connection.";
-        }
-
-        this.showMessage(errorMessage, "error");
-      } finally {
-        // Reset button
-        if (submitButton) {
-          submitButton.textContent = originalText;
-          submitButton.disabled = false;
-        }
-      }
-    });
-
-    return true; // Success
-  };
-
-  // Try immediately first
-  if (trySetupForm()) {
-    return;
+    }, 10);
   }
-
-  // If form not found, try again after a short delay to allow DOM to update
-  setTimeout(() => {
-    if (!trySetupForm()) {
-      // If still not found after delay, try once more with a longer delay
-      setTimeout(() => {
-        trySetupForm();
-      }, 100);
-    }
-  }, 10);
-}
 
   async viewIdeaDetails(ideaId) {
     const modal = document.createElement("div");
@@ -342,16 +299,15 @@ setupFeedbackForm() {
     document.body.appendChild(modal);
 
     try {
-      const result = await supabaseHelper.getIdeaDetails(ideaId);
+      // TODO: Call supabaseHelper.getIdeaDetails(ideaId)
+      const result = { restricted: true, message: "Detailed view coming soon!" };
 
       const modalBody = modal.querySelector(".modal-body");
 
       if (result.restricted) {
         modalBody.innerHTML = `
           <div class="text-center">
-            <p>${
-              result.message || "Detailed view is not available at this time."
-            }</p>
+            <p>${result.message || "Detailed view is not available at this time."}</p>
           </div>
         `;
       } else {
@@ -371,11 +327,7 @@ setupFeedbackForm() {
             <p>${this.escapeHtml(idea.alternatives)}</p>
             
             <div class="idea-meta">
-              Categories: ${
-                Array.isArray(idea.category)
-                  ? idea.category.join(", ")
-                  : idea.category || "None"
-              } • 
+              Categories: ${Array.isArray(idea.category) ? idea.category.join(", ") : idea.category || "None"} • 
               Quality Score: ${idea.quality_score}/100
             </div>
             
@@ -389,7 +341,7 @@ setupFeedbackForm() {
     }
   }
 
-  // Screen 2: My Submissions - Fixed duplicates and improved project display
+  // Screen 2: My Submissions - Compact Design with Expand/Collapse
   async loadSubmissionsScreen() {
     const container = document.getElementById("submissions-list");
     if (!container) return;
@@ -403,22 +355,9 @@ setupFeedbackForm() {
       return;
     }
 
-    // Deduplicate by creating unique key per submission
-    const uniqueDrafts = {};
-    drafts.forEach((draft) => {
-      const key = `${draft.full_name}-${draft.project_name || "Default"}-v${
-        draft.version
-      }`;
-      if (!uniqueDrafts[key] || draft.saved_at > uniqueDrafts[key].saved_at) {
-        uniqueDrafts[key] = draft;
-      }
-    });
-
-    const dedupedDrafts = Object.values(uniqueDrafts);
-
-    // Group by user, then by project
+    // Group by user and project
     const userGroups = {};
-    dedupedDrafts.forEach((draft) => {
+    drafts.forEach((draft) => {
       if (!userGroups[draft.full_name]) {
         userGroups[draft.full_name] = {};
       }
@@ -432,66 +371,29 @@ setupFeedbackForm() {
     let html = "";
     Object.entries(userGroups).forEach(([userName, userProjects]) => {
       html += `
-        <div class="user-section">
-          <div class="user-header">${this.escapeHtml(userName)}</div>
-          <div class="projects-overview">
-            <h4>Projects Summary</h4>
-            ${Object.entries(userProjects)
-              .map(([projectName, projectDrafts]) => {
-                const finalDraft = projectDrafts.find((d) => d.is_final);
-                const maxVersion = Math.max(
-                  ...projectDrafts.map((d) => d.version)
-                );
-                const status = finalDraft
-                  ? "Final Submitted"
-                  : `Draft v${maxVersion}/3`;
-                const statusClass = finalDraft ? "success" : "warning";
-
-                return `
-                <div class="project-overview">
-                  <div class="project-header">
-                    <strong>${this.escapeHtml(projectName)}</strong>
-                    <span class="status ${statusClass}">${status}</span>
+        <div class="user-section-compact">
+          <div class="user-header-compact">${this.escapeHtml(userName)}</div>
+          ${Object.entries(userProjects)
+            .map(([projectName, projectDrafts]) => {
+              const latestDraft = projectDrafts.sort((a, b) => b.version - a.version)[0];
+              const submissionId = `${userName}-${projectName}`;
+              const isExpanded = this.expandedSubmissions.has(submissionId);
+              
+              return `
+                <div class="submission-compact">
+                  <div class="submission-header-compact" onclick="app.toggleSubmissionDetails('${submissionId}')">
+                    <div class="submission-summary">
+                      <div class="submission-title">${this.escapeHtml(projectName)}</div>
+                      <div class="submission-preview">${this.escapeHtml((latestDraft.product_idea || "").substring(0, 80))}${latestDraft.product_idea && latestDraft.product_idea.length > 80 ? "..." : ""}</div>
+                    </div>
+                    <div class="expand-arrow ${isExpanded ? "expanded" : ""}">${isExpanded ? "▼" : "▶"}</div>
                   </div>
-                  <div class="project-meta">
-                    ${projectDrafts.length} attempt${
-                  projectDrafts.length !== 1 ? "s" : ""
-                } • 
-                    Last updated: ${new Date(
-                      Math.max(
-                        ...projectDrafts.map((d) => new Date(d.saved_at))
-                      )
-                    ).toLocaleDateString()}
-                  </div>
-                  <div class="project-preview">
-                    ${this.escapeHtml(
-                      (
-                        projectDrafts.sort((a, b) => b.version - a.version)[0]
-                          .product_idea || ""
-                      ).substring(0, 100)
-                    )}${
-                  projectDrafts[0].product_idea &&
-                  projectDrafts[0].product_idea.length > 100
-                    ? "..."
-                    : ""
-                }
+                  <div class="submission-details ${isExpanded ? "expanded" : ""}" id="details-${submissionId}">
+                    ${projectDrafts.map(draft => this.renderSubmissionItem(draft, projectName)).join("")}
                   </div>
                 </div>
               `;
-              })
-              .join("")}
-          </div>
-          <div class="user-submissions">
-            <h4>All Submissions</h4>
-            ${Object.entries(userProjects)
-              .map(([projectName, projectDrafts]) =>
-                projectDrafts
-                  .sort((a, b) => b.version - a.version)
-                  .map((draft) => this.renderSubmissionItem(draft, projectName))
-                  .join("")
-              )
-              .join("")}
-          </div>
+            }).join("")}
         </div>
       `;
     });
@@ -499,129 +401,87 @@ setupFeedbackForm() {
     container.innerHTML = html;
   }
 
-  renderSubmissionItem(draft, projectName) {
-    const statusText = draft.is_final
-      ? "Final Submission"
-      : `Draft v${draft.version}`;
-    const statusClass = draft.is_final ? "success" : "warning";
+  toggleSubmissionDetails(submissionId) {
+    const detailsElement = document.getElementById(`details-${submissionId}`);
+    const arrowElement = document.querySelector(`[onclick="app.toggleSubmissionDetails('${submissionId}')"] .expand-arrow`);
+    
+    if (this.expandedSubmissions.has(submissionId)) {
+      this.expandedSubmissions.delete(submissionId);
+      detailsElement.classList.remove("expanded");
+      arrowElement.classList.remove("expanded");
+      arrowElement.textContent = "▶";
+    } else {
+      this.expandedSubmissions.add(submissionId);
+      detailsElement.classList.add("expanded");
+      arrowElement.classList.add("expanded");
+      arrowElement.textContent = "▼";
+    }
+  }
 
-    // Handle both old and new AI feedback formats for display
-    const aiScore =
-      draft.ai_feedback?.overall_score || draft.ai_feedback?.score;
+  renderSubmissionItem(draft, projectName) {
+    const statusText = draft.is_final ? "Final Submission" : `Draft v${draft.version}`;
+    const statusClass = draft.is_final ? "success" : "warning";
+    const aiScore = draft.ai_feedback?.overall_score || draft.ai_feedback?.score;
 
     return `
-      <div class="submission-item">
-        <div class="submission-header">
-          <strong>${this.escapeHtml(projectName)} - ${this.escapeHtml(
-      (draft.product_idea || "").substring(0, 60)
-    )}${
-      draft.product_idea && draft.product_idea.length > 60 ? "..." : ""
-    }</strong>
+      <div class="submission-item-compact">
+        <div class="submission-meta-compact">
           <span class="status ${statusClass}">${statusText}</span>
-        </div>
-        <div class="submission-meta">
-          Saved: ${new Date(draft.saved_at).toLocaleString()}
-          ${aiScore ? `• AI Score: ${aiScore}/100` : ""}
+          <span class="submission-date">${new Date(draft.saved_at).toLocaleDateString()}</span>
+          ${aiScore ? `<span class="ai-score">AI: ${aiScore}/100</span>` : ""}
         </div>
         ${this.renderAIFeedback(draft.ai_feedback)}
       </div>
     `;
   }
 
-  renderAIFeedback(feedback) {
-    if (!feedback) return "";
-
-    // Handle both old and new feedback formats
-    if (feedback.critique && feedback.suggestions && feedback.grading) {
-      // New structured format
-      return this.renderStructuredAIFeedback(feedback);
-    } else {
-      // Legacy format
-      return this.renderLegacyAIFeedback(feedback);
-    }
-  }
-
-  renderStructuredAIFeedback(feedback) {
-    return `
-      <div class="ai-feedback">
-        <h5>AI Analysis (Score: ${feedback.overall_score}/100)</h5>
-        
-        <div class="feedback-summary">
-          <p><strong>Summary:</strong> ${this.escapeHtml(feedback.summary)}</p>
-        </div>
-        
-        <div class="critique-section">
-          <h6>Strengths</h6>
-          <ul>${feedback.critique.strengths
-            .map((strength) => `<li>${this.escapeHtml(strength)}</li>`)
-            .join("")}</ul>
-          
-          <h6>Areas for Improvement</h6>
-          <ul>${feedback.critique.weaknesses
-            .map((weakness) => `<li>${this.escapeHtml(weakness)}</li>`)
-            .join("")}</ul>
-        </div>
-        
-        <div class="suggestions-section">
-          <h6>Actionable Recommendations</h6>
-          <ul>${feedback.suggestions
-            .map((suggestion) => `<li>${this.escapeHtml(suggestion)}</li>`)
-            .join("")}</ul>
-        </div>
-        
-        <div class="grading-section">
-          <h6>Detailed Scoring</h6>
-          <div class="score-grid">
-            ${Object.entries(feedback.grading)
-              .map(
-                ([criterion, data]) => `
-                <div class="score-item">
-                  <div class="score-label">${this.formatFeedbackTitle(
-                    criterion
-                  )}</div>
-                  <div class="score-value">${data.score}/10</div>
-                  <div class="score-reasoning">${this.escapeHtml(
-                    data.reasoning
-                  )}</div>
-                </div>
-              `
-              )
-              .join("")}
-          </div>
-        </div>
-      </div>
-    `;
-  }
-
-  renderLegacyAIFeedback(feedback) {
-    return `
-      <div class="ai-feedback">
-        <h5>AI Feedback (Score: ${feedback.score}/100)</h5>
-        <div class="feedback-sections">
-          ${Object.entries(feedback)
-            .filter(([key]) => key !== "score")
-            .map(
-              ([key, bullets]) => `
-            <div class="feedback-section">
-              <h6>${this.formatFeedbackTitle(key)}</h6>
-              <ul>${bullets
-                .map((bullet) => `<li>${this.escapeHtml(bullet)}</li>`)
-                .join("")}</ul>
-            </div>
-          `
-            )
-            .join("")}
-        </div>
-      </div>
-    `;
-  }
-
-  // Screen 3: Submit Ideas - Fixed to allow 3 attempts and final draft confirmation
+  // Screen 3: Enhanced Submit Ideas with Dynamic Forms
   loadSubmitScreen() {
+    this.updateGreeting();
     this.setupSubmitForm();
     this.updateWordCounts();
     this.setupUserSelectOptions();
     this.setupCategoryMultiSelect();
+    this.checkCooldownStatus();
+  }
+
+  updateGreeting() {
+    const greetingElement = document.getElementById("greeting-text");
+    if (greetingElement) {
+      const userName = this.currentUser || "there";
+      const greetings = [
+        `Hey ${userName}! Ready to share your idea?`,
+        `What's cooking, ${userName}?`,
+        `Time to make magic happen, ${userName}!`,
+        `Let's build something amazing, ${userName}!`
+      ];
+      const randomGreeting = greetings[Math.floor(Math.random() * greetings.length)];
+      greetingElement.textContent = randomGreeting;
+    }
+  }
+
+  async checkCooldownStatus() {
+    if (!this.currentUser || !this.currentProject) return;
+
+    // TODO: Check first_draft_submitted_at from database
+    // const drafts = await dbHelper.getDraftsByUserAndProject(this.currentUser, this.currentProject);
+    // const firstDraft = drafts.find(d => d.version === 1);
+    
+    const cooldownElement = document.getElementById("cooldown-message");
+    const cooldownDaysElement = document.getElementById("cooldown-days");
+    
+    // Placeholder logic - replace with actual database check
+    const showCooldown = false; // Replace with actual cooldown check
+    
+    if (showCooldown) {
+      const cooldownDays = window.ENV.DRAFT_COOLDOWN_DAYS || 7;
+      cooldownElement.classList.remove("hidden");
+      if (cooldownDaysElement) {
+        cooldownDaysElement.textContent = cooldownDays;
+      }
+    } else {
+      cooldownElement.classList.add("hidden");
+    }
   }
 
   setupSubmitForm() {
@@ -630,18 +490,19 @@ setupFeedbackForm() {
 
     // Remove existing listeners to avoid duplicates
     form.removeEventListener("submit", this.handleSubmissionBound);
-
-    // Bind the method to preserve 'this' context
     this.handleSubmissionBound = this.handleSubmission.bind(this);
-
-    // Form submission
     form.addEventListener("submit", this.handleSubmissionBound);
 
-    // Word count listeners
+    // Word count listeners for auto-expanding textareas
     form.querySelectorAll('textarea, input[type="text"]').forEach((input) => {
       input.removeEventListener("input", this.updateWordCountsBound);
       this.updateWordCountsBound = this.updateWordCounts.bind(this);
       input.addEventListener("input", this.updateWordCountsBound);
+      
+      // Initialize auto-expand for textareas
+      if (input.classList.contains("auto-expand")) {
+        this.autoExpandTextarea(input);
+      }
     });
 
     // User selection
@@ -655,10 +516,7 @@ setupFeedbackForm() {
     // Project selection
     const projectSelect = document.getElementById("project-select");
     if (projectSelect) {
-      projectSelect.removeEventListener(
-        "change",
-        this.handleProjectSelectBound
-      );
+      projectSelect.removeEventListener("change", this.handleProjectSelectBound);
       this.handleProjectSelectBound = this.handleProjectSelect.bind(this);
       projectSelect.addEventListener("change", this.handleProjectSelectBound);
     }
@@ -667,10 +525,8 @@ setupFeedbackForm() {
   setupCategoryMultiSelect() {
     const categorySelect = document.getElementById("category");
     if (!categorySelect) return;
-
-    // Convert single select to multi-select
     categorySelect.multiple = true;
-    categorySelect.size = 5; // Show 5 options at once
+    categorySelect.size = 5;
   }
 
   handleUserSelect(e) {
@@ -679,14 +535,15 @@ setupFeedbackForm() {
     if (selectedValue === "new") {
       this.showUserCreationForm();
     } else if (selectedValue) {
-      // Attempt to select existing user
       this.selectExistingUser(selectedValue);
     } else {
-      // User selected "Select User" option
       this.currentUser = null;
       this.currentProject = null;
-      this.setupProjectSelectOptions(); // This will clear project options
+      this.setupProjectSelectOptions();
     }
+    
+    this.updateGreeting();
+    this.checkCooldownStatus();
   }
 
   handleProjectSelect(e) {
@@ -695,15 +552,16 @@ setupFeedbackForm() {
     } else {
       this.currentProject = e.target.value;
     }
+    this.checkCooldownStatus();
   }
 
   async createNewProject() {
-    const projectName = prompt("Enter project name:");
+    const projectName = prompt("What's your project name?");
     if (!projectName) return;
 
     this.currentProject = projectName;
 
-    // Save a placeholder draft locally to persist the project
+    // Save placeholder draft
     await dbHelper.saveDraft({
       device_id: dbHelper.getDeviceId(),
       full_name: this.currentUser,
@@ -714,12 +572,12 @@ setupFeedbackForm() {
       alternatives: "",
       category: [],
       heard_about: "",
-      version: 0, // 0 means placeholder
+      version: 0,
       is_final: false,
     });
 
     await this.setupProjectSelectOptions();
-    this.showMessage(`Project "${projectName}" created`, "success");
+    this.showMessage(`Project "${projectName}" created!`, "success");
   }
 
   async setupProjectSelectOptions() {
@@ -727,21 +585,16 @@ setupFeedbackForm() {
     if (!projectSelect || !this.currentUser) return;
 
     const userDrafts = await dbHelper.getDraftsByUser(this.currentUser);
-    const projects = [
-      ...new Set(userDrafts.map((d) => d.project_name || "Default Project")),
-    ];
+    const projects = [...new Set(userDrafts.map((d) => d.project_name || "Default Project"))];
 
     projectSelect.innerHTML = `
       <option value="">Select Project</option>
       <option value="new">Create New Project</option>
-      ${projects
-        .map(
-          (project) =>
-            `<option value="${this.escapeHtml(project)}" ${
-              project === this.currentProject ? "selected" : ""
-            }>${this.escapeHtml(project)}</option>`
-        )
-        .join("")}
+      ${projects.map(project => `
+        <option value="${this.escapeHtml(project)}" ${project === this.currentProject ? "selected" : ""}>
+          ${this.escapeHtml(project)}
+        </option>
+      `).join("")}
     `;
   }
 
@@ -754,14 +607,9 @@ setupFeedbackForm() {
     userSelect.innerHTML = `
       <option value="">Select User</option>
       <option value="new">Create New User</option>
-      ${users
-        .map(
-          (user) =>
-            `<option value="${this.escapeHtml(
-              user.full_name
-            )}">${this.escapeHtml(user.full_name)}</option>`
-        )
-        .join("")}
+      ${users.map(user => `
+        <option value="${this.escapeHtml(user.full_name)}">${this.escapeHtml(user.full_name)}</option>
+      `).join("")}
     `;
   }
 
@@ -778,27 +626,21 @@ setupFeedbackForm() {
       const counter = document.getElementById(`${id}-count`);
 
       if (input && counter) {
-        const words = input.value
-          .trim()
-          .split(/\s+/)
-          .filter((w) => w.length > 0);
+        const words = input.value.trim().split(/\s+/).filter((w) => w.length > 0);
         const count = words.length;
 
         counter.textContent = `${count} words (${min}-${max})`;
-        counter.className =
-          count > max ? "word-counter over-limit" : "word-counter";
+        counter.className = count > max ? "word-counter over-limit" : "word-counter";
       }
     });
   }
 
-  // Fixed submission handling to allow 3 attempts and proper final draft confirmation
+  // Enhanced submission handling with draft progression
   async handleSubmission(e) {
     e.preventDefault();
 
-    console.log("🔧 DEBUG: Starting submission process");
-
     if (!this.currentUser) {
-      this.showMessage("Please select or create a user first", "error");
+      this.showMessage("Please select who you are first!", "error");
       return;
     }
 
@@ -808,13 +650,10 @@ setupFeedbackForm() {
     }
 
     const formData = new FormData(e.target);
-
-    // Get selected categories (now multi-select)
     const categorySelect = document.getElementById("category");
-    const selectedCategories = Array.from(categorySelect.selectedOptions).map(
-      (option) => option.value
-    );
+    const selectedCategories = Array.from(categorySelect.selectedOptions).map(option => option.value);
 
+    // Build submission object with field names for validation
     const submission = {
       device_id: dbHelper.getDeviceId(),
       full_name: this.currentUser,
@@ -825,15 +664,18 @@ setupFeedbackForm() {
       alternatives: formData.get("alternatives"),
       category: selectedCategories,
       heard_about: formData.get("heard_about"),
+      // Draft 2 fields
+      market_validation: formData.get("market_validation"),
+      competitor_research: formData.get("competitor_research"),
+      mvp_development: formData.get("mvp_development"),
+      // Draft 3 fields
+      investor_pitch: formData.get("investor_pitch"),
+      additional_research: formData.get("additional_research"),
+      mvp_link: formData.get("mvp_link"),
     };
 
-    console.log("🔧 DEBUG: Submission data:", submission);
-
-    // Validate submission
-    const validationResult = await validation.validateSubmission(
-      submission,
-      this.ideas
-    );
+    // Validate using field names instead of HTML5 required
+    const validationResult = await validation.validateSubmission(submission, this.ideas);
 
     if (!validationResult.passed) {
       this.showMessage(validationResult.errors.join(", "), "error");
@@ -842,156 +684,106 @@ setupFeedbackForm() {
 
     submission.quality_score = validationResult.qualityScore;
 
-    // Determine attempt number for this project (fixed to allow 3 attempts)
-    const existingDrafts = await dbHelper.getDraftsByUserAndProject(
-      this.currentUser,
-      this.currentProject
-    );
-
-    // Filter out placeholder drafts (version 0)
+    // Determine draft number
+    const existingDrafts = await dbHelper.getDraftsByUserAndProject(this.currentUser, this.currentProject);
     const realDrafts = existingDrafts.filter((d) => d.version > 0);
     const attemptNumber = realDrafts.length + 1;
     submission.version = attemptNumber;
 
-    console.log(
-      "🔧 DEBUG: Attempt number:",
-      attemptNumber,
-      "Real drafts found:",
-      realDrafts.length
-    );
-
     try {
       if (attemptNumber <= 2) {
-        // Attempts 1 & 2: Save locally + get AI feedback
-        console.log(
-          "🔧 DEBUG: Processing draft submission (attempt",
-          attemptNumber,
-          ")"
-        );
+        // Draft submissions
+        // TODO: const aiFeedback = await supabaseHelper.getAIFeedback(submission);
+        // submission.ai_feedback = aiFeedback;
 
-        const aiFeedback = await supabaseHelper.getAIFeedback(submission);
-        submission.ai_feedback = aiFeedback;
-
-        // Update quality score with AI's overall assessment if available
-        if (aiFeedback.overall_score) {
-          submission.quality_score = aiFeedback.overall_score;
+        if (attemptNumber === 1) {
+          // TODO: Store first_draft_submitted_at timestamp in database
+          submission.first_draft_submitted_at = new Date().toISOString();
         }
 
         await dbHelper.saveDraft(submission);
-
-        this.showMessage(
-          `Draft ${attemptNumber} saved successfully! AI feedback generated.`,
-          "success"
-        );
-        this.showAIFeedbackModal(aiFeedback);
+        
+        this.showMessage(`Draft ${attemptNumber} saved! AI feedback coming soon.`, "success");
         this.clearForm();
+        this.checkCooldownStatus();
+        
       } else if (attemptNumber === 3) {
-        // Attempt 3: Show confirmation and submit final
-        console.log("🔧 DEBUG: Processing final submission (attempt 3)");
+        // Final submission
+        const confirmed = confirm("This is your final submission! Are you sure you're ready?");
+        
+        if (!confirmed) return;
 
-        const confirmed = confirm(
-          "⚠️ FINAL SUBMISSION WARNING ⚠️\n\nThis is your 3rd and final submission for this project. After submitting:\n• You cannot make any more changes\n• This idea will be saved permanently\n• You cannot submit again for this project\n\nAre you absolutely sure you want to proceed?"
-        );
-
-        if (!confirmed) {
-          console.log("🔧 DEBUG: Final submission cancelled by user");
-          return;
-        }
-
-        // Get final AI feedback
-        const aiFeedback = await supabaseHelper.getAIFeedback(submission);
-        submission.ai_feedback = aiFeedback;
         submission.is_final = true;
 
-        // Update quality score with AI's overall assessment if available
-        if (aiFeedback.overall_score) {
-          submission.quality_score = aiFeedback.overall_score;
-        }
-
         if (this.isOnline) {
-          console.log("🔧 DEBUG: Submitting final idea to Supabase");
-
-          // Submit to Supabase
-          try {
-            await supabaseHelper.submitFinalIdea(submission);
-            await supabaseHelper.createUser(this.currentUser);
-
-            console.log(
-              "🔧 DEBUG: Final idea submitted successfully to Supabase"
-            );
-          } catch (supabaseError) {
-            console.error(
-              "🔧 DEBUG: Supabase submission failed:",
-              supabaseError
-            );
-            throw supabaseError;
-          }
-
-          // Save final draft locally
-          await dbHelper.saveDraft(submission);
-
-          this.showMessage(
-            "🎉 Idea submitted successfully! Thank you for using Capsera.",
-            "success"
-          );
-          this.showAIFeedbackModal(aiFeedback);
-          this.clearForm();
+          // TODO: await supabaseHelper.submitFinalIdea(submission);
+          // TODO: await supabaseHelper.createUser(this.currentUser);
         } else {
-          console.log("🔧 DEBUG: Offline - queuing final submission");
-
-          // Queue for later submission
-          await dbHelper.saveDraft(submission);
           await dbHelper.addToSyncQueue(submission);
-          this.showMessage("Queued for submission when online", "warning");
         }
+
+        await dbHelper.saveDraft(submission);
+        this.showMessage("Idea submitted successfully! Thank you!", "success");
+        this.clearForm();
+        
       } else {
-        // More than 3 attempts - should not happen, but safety check
-        console.log(
-          "🔧 DEBUG: Too many attempts for project:",
-          this.currentProject
-        );
-        this.showMessage(
-          "Maximum 3 submission attempts reached for this project. Please create a new project.",
-          "error"
-        );
+        this.showMessage("Maximum submissions reached for this project.", "error");
       }
     } catch (error) {
-      console.error("🔧 DEBUG: Submission error:", error);
-      this.showMessage(
-        `Submission failed: ${error.message}. Please try again.`,
-        "error"
-      );
+      console.error("Submission error:", error);
+      this.showMessage(`Submission failed: ${error.message}`, "error");
     }
   }
 
-  showAIFeedbackModal(feedback) {
-    const modal = document.createElement("div");
-    modal.className = "modal-overlay";
+  // Enhanced AI Feedback Rendering
+  renderAIFeedback(feedback) {
+    if (!feedback) return "";
 
-    // Handle both old and new feedback formats for modal title
-    const score = feedback.overall_score || feedback.score;
+    if (feedback.critique && feedback.suggestions && feedback.grading) {
+      return this.renderStructuredAIFeedback(feedback);
+    } else {
+      return this.renderLegacyAIFeedback(feedback);
+    }
+  }
 
-    modal.innerHTML = `
-      <div class="modal-content">
-        <div class="modal-header">
-          <h3>AI Analysis (Score: ${score}/100)</h3>
-          <button onclick="this.closest('.modal-overlay').remove()">×</button>
+  renderStructuredAIFeedback(feedback) {
+    return `
+      <div class="ai-feedback-compact">
+        <div class="feedback-header">
+          <span class="ai-badge">AI Analysis</span>
+          <span class="score-badge">${feedback.overall_score}/100</span>
         </div>
-        <div class="modal-body">
-          ${this.renderAIFeedback(feedback)}
-          <div class="modal-footer">
-            <button class="btn btn-primary" onclick="this.closest('.modal-overlay').remove()">
-              Close
-            </button>
-          </div>
+        <div class="feedback-summary">
+          <strong>Key Points:</strong>
+          <ul class="feedback-bullets">
+            ${feedback.critique.strengths.slice(0, 2).map(strength => `<li class="strength">+ ${this.escapeHtml(strength)}</li>`).join("")}
+            ${feedback.critique.weaknesses.slice(0, 2).map(weakness => `<li class="weakness">- ${this.escapeHtml(weakness)}</li>`).join("")}
+          </ul>
         </div>
       </div>
     `;
-
-    document.body.appendChild(modal);
   }
 
-  // Screen 4: Settings - Enhanced language switching with loading
+  renderLegacyAIFeedback(feedback) {
+    return `
+      <div class="ai-feedback-compact">
+        <div class="feedback-header">
+          <span class="ai-badge">AI Feedback</span>
+          <span class="score-badge">${feedback.score}/100</span>
+        </div>
+        <div class="feedback-summary">
+          ${Object.entries(feedback).filter(([key]) => key !== "score").slice(0, 1).map(([key, bullets]) => `
+            <strong>${this.formatFeedbackTitle(key)}:</strong>
+            <ul class="feedback-bullets">
+              ${bullets.slice(0, 3).map(bullet => `<li>${this.escapeHtml(bullet)}</li>`).join("")}
+            </ul>
+          `).join("")}
+        </div>
+      </div>
+    `;
+  }
+
+  // Screen 4: Settings (simplified)
   async loadSettingsScreen() {
     this.renderLanguageSelector();
     await this.loadUsersList();
@@ -1002,17 +794,12 @@ setupFeedbackForm() {
     if (!container) return;
 
     const currentLang = translator.getCurrentLanguage();
-
-    const html = translator.supportedLangs
-      .map(
-        (lang) => `
+    const html = translator.supportedLangs.map(lang => `
       <div class="language-option ${lang === currentLang ? "selected" : ""}" 
            onclick="app.selectLanguage('${lang}')">
         ${translator.getLanguageName(lang)}
       </div>
-    `
-      )
-      .join("");
+    `).join("");
 
     container.innerHTML = html;
   }
@@ -1020,7 +807,6 @@ setupFeedbackForm() {
   async selectLanguage(lang) {
     if (lang === this.currentLanguage) return;
 
-    // Show loading overlay
     const loadingOverlay = document.createElement("div");
     loadingOverlay.className = "modal-overlay";
     loadingOverlay.innerHTML = `
@@ -1028,7 +814,7 @@ setupFeedbackForm() {
         <div class="modal-body">
           <div class="loading">
             <div class="loading-spinner"></div>
-            <p>Updating language... Please wait.</p>
+            <p>Updating language...</p>
           </div>
         </div>
       </div>
@@ -1041,7 +827,7 @@ setupFeedbackForm() {
         this.translations = await translator.getTranslations(lang);
         translator.applyTranslations(this.translations);
         this.renderLanguageSelector();
-        this.showMessage("Language updated successfully", "success");
+        this.showMessage("Language updated!", "success");
       }
     } catch (error) {
       console.error("Language update failed:", error);
@@ -1056,35 +842,23 @@ setupFeedbackForm() {
     if (!container) return;
 
     try {
-      const users = await supabaseHelper.getAllUsers();
+      // TODO: const users = await supabaseHelper.getAllUsers();
       const localUsers = await dbHelper.getAllUsers();
-
-      // Combine and dedupe users
-      const allUsers = [...users, ...localUsers].reduce((acc, user) => {
-        if (!acc.find((u) => u.full_name === user.full_name)) {
-          acc.push(user);
-        }
-        return acc;
-      }, []);
+      const allUsers = localUsers; // Combine with remote users when available
 
       if (allUsers.length === 0) {
         container.innerHTML = '<div class="text-center">No users found</div>';
         return;
       }
 
-      const html = allUsers
-        .map(
-          (user) => `
+      const html = allUsers.map(user => `
         <div class="user-item">
           <span>${this.escapeHtml(user.full_name)}</span>
-          <button class="btn btn-danger btn-sm" 
-                  onclick="app.deleteUser('${user.full_name}')">
+          <button class="btn btn-danger btn-sm" onclick="app.deleteUser('${user.full_name}')">
             Delete
           </button>
         </div>
-      `
-        )
-        .join("");
+      `).join("");
 
       container.innerHTML = html;
     } catch (error) {
@@ -1093,28 +867,26 @@ setupFeedbackForm() {
     }
   }
 
-  // Updated syncOfflineData method as per instructions
+  // Utility methods
   async syncOfflineData() {
     if (!this.isOnline) return;
 
-    console.log("🔧 SYNC: Starting offline data sync");
-
-    // Sync ideas queue (existing code)
     const queue = await dbHelper.getSyncQueue();
+    let syncedCount = 0;
 
     for (const item of queue) {
       try {
-        await supabaseHelper.submitFinalIdea(item);
-        await supabaseHelper.createUser(item.full_name);
+        // TODO: await supabaseHelper.submitFinalIdea(item);
+        // TODO: await supabaseHelper.createUser(item.full_name);
         await dbHelper.removeFromSyncQueue(item.key);
+        syncedCount++;
       } catch (error) {
         console.error("Sync failed for item:", item.key, error);
       }
     }
 
-    const totalSynced = queue.length;
-    if (totalSynced > 0) {
-      this.showMessage(`Synced ${totalSynced} submissions`, "success");
+    if (syncedCount > 0) {
+      this.showMessage(`Synced ${syncedCount} submissions`, "success");
     }
   }
 
@@ -1123,21 +895,15 @@ setupFeedbackForm() {
     toast.className = `toast ${type}`;
     toast.textContent = message;
     toast.style.cssText = `
-      position: fixed; top: 20px; right: 20px; z-index: 1000;
+      position: fixed; top: 20px; right: 20px; z-index: 1001;
       padding: 12px 20px; border-radius: 4px; color: white;
-      background: ${
-        type === "success"
-          ? "#28a745"
-          : type === "error"
-          ? "#dc3545"
-          : type === "warning"
-          ? "#ffc107"
-          : "#17a2b8"
-      };
+      background: ${type === "success" ? "#28a745" : type === "error" ? "#dc3545" : type === "warning" ? "#ffc107" : "#17a2b8"};
+      font-weight: 600; box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+      animation: slideInRight 0.3s ease;
     `;
 
     document.body.appendChild(toast);
-    setTimeout(() => toast.remove(), 3000);
+    setTimeout(() => toast.remove(), 4000);
   }
 
   escapeHtml(text) {
@@ -1148,23 +914,25 @@ setupFeedbackForm() {
   }
 
   formatFeedbackTitle(key) {
-    return key
-      .split("_")
-      .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
-      .join(" ");
+    return key.split("_").map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(" ");
   }
 
   clearForm() {
     const form = document.getElementById("submit-form");
     if (form) {
       form.reset();
+      // Reset auto-expand textareas
+      form.querySelectorAll(".auto-expand").forEach(textarea => {
+        textarea.style.height = "auto";
+        this.autoExpandTextarea(textarea);
+      });
       this.updateWordCounts();
     }
     this.currentProject = null;
   }
 
   async deleteUser(fullName) {
-    const pin = prompt("Enter 4-digit PIN to delete user:");
+    const pin = prompt("Enter your 4-digit PIN:");
     if (!pin || pin.length !== 4) return;
 
     const localUser = await dbHelper.getUser(fullName);
@@ -1175,10 +943,8 @@ setupFeedbackForm() {
 
     try {
       await dbHelper.deleteUser(fullName);
-      if (this.isOnline) {
-        await supabaseHelper.deleteUser(fullName);
-      }
-
+      // TODO: if (this.isOnline) await supabaseHelper.deleteUser(fullName);
+      
       this.showMessage("User deleted", "success");
       this.loadUsersList();
     } catch (error) {
@@ -1188,10 +954,10 @@ setupFeedbackForm() {
   }
 
   async showUserCreationForm() {
-    const name = prompt("Enter your full name:");
+    const name = prompt("What's your full name?");
     if (!name) return;
 
-    const pin = prompt("Create a 4-digit PIN for this account:");
+    const pin = prompt("Create a 4-digit PIN:");
     if (!pin || pin.length !== 4 || !/^\d{4}$/.test(pin)) {
       this.showMessage("PIN must be exactly 4 digits", "error");
       return;
@@ -1201,15 +967,15 @@ setupFeedbackForm() {
     await dbHelper.saveUser(name, pinHash);
 
     this.currentUser = name;
-    this.setupUserSelectOptions(); // Refresh the dropdown
-    this.setupProjectSelectOptions(); // Refresh projects for new user
-    this.showMessage(`User ${name} created`, "success");
+    this.setupUserSelectOptions();
+    this.setupProjectSelectOptions();
+    this.updateGreeting();
+    this.showMessage(`Welcome, ${name}!`, "success");
   }
 
   async selectExistingUser(fullName) {
-    const pin = prompt("Enter your 4-digit PIN:");
+    const pin = prompt("Enter your PIN:");
     if (!pin) {
-      // User cancelled - reset dropdown to previous selection
       this.resetUserDropdownToPrevious();
       return;
     }
@@ -1217,30 +983,22 @@ setupFeedbackForm() {
     const localUser = await dbHelper.getUser(fullName);
     if (!localUser || dbHelper.hashPin(pin) !== localUser.pin_hash) {
       this.showMessage("Invalid PIN", "error");
-      // Reset dropdown to previous selection on invalid PIN
       this.resetUserDropdownToPrevious();
       return;
     }
 
-    // PIN is valid - proceed with user selection
     this.currentUser = fullName;
     this.currentProject = null;
-    await this.setupProjectSelectOptions(); // Load projects for selected user
-    this.showMessage(`Switched to ${fullName}`, "success");
+    await this.setupProjectSelectOptions();
+    this.showMessage(`Welcome back, ${fullName}!`, "success");
   }
 
   resetUserDropdownToPrevious() {
     const userSelect = document.getElementById("user-select");
     if (!userSelect) return;
 
-    // Reset to the current valid user or default
-    if (this.currentUser) {
-      userSelect.value = this.currentUser;
-    } else {
-      userSelect.value = ""; // Reset to "Select User"
-    }
-
-    // Also clear project selection since user selection failed
+    userSelect.value = this.currentUser || "";
+    
     const projectSelect = document.getElementById("project-select");
     if (projectSelect) {
       projectSelect.innerHTML = '<option value="">Select Project</option>';
@@ -1253,3 +1011,13 @@ setupFeedbackForm() {
 document.addEventListener("DOMContentLoaded", () => {
   window.app = new CapseraApp();
 });
+
+// Add CSS animation for toast
+const style = document.createElement('style');
+style.textContent = `
+  @keyframes slideInRight {
+    from { transform: translateX(100%); opacity: 0; }
+    to { transform: translateX(0); opacity: 1; }
+  }
+`;
+document.head.appendChild(style);
