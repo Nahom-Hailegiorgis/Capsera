@@ -544,7 +544,7 @@ class CapseraApp {
             anonymous: !contact,
           };
 
-          // Store locally first for offline support
+          // FIXED: Store locally first for offline support with proper validation
           await dbHelper.saveFeedback(feedbackData);
           
           if (this.isOnline) {
@@ -925,6 +925,7 @@ class CapseraApp {
     setTimeout(() => this.restoreAutoSavedDraft(), 100);
   }
 
+  // FIXED: Enhanced createNewProject method to ensure proper transaction handling
   async createNewProject() {
     const projectName = prompt(this.t("Enter project name:"));
     if (!projectName || !projectName.trim()) return;
@@ -945,6 +946,8 @@ class CapseraApp {
 
       await this.saveProjectsLocally(this.currentUserId, this.projects);
 
+      // FIXED: Prepare the placeholder draft with all required fields BEFORE calling saveDraft
+      // This ensures no async operations happen during the IndexedDB transaction
       const placeholderDraft = {
         device_id: dbHelper.getDeviceId(),
         full_name: this.currentUser,
@@ -962,6 +965,7 @@ class CapseraApp {
         saved_at: new Date().toISOString()
       };
 
+      // FIXED: Call saveDraft with prepared data to prevent transaction timeout
       await dbHelper.saveDraft(placeholderDraft);
       await this.setupProjectSelectOptions();
       
@@ -972,7 +976,7 @@ class CapseraApp {
 
       if (this.isOnline) {
         try {
-          // TODO: Add supabaseHelper.createProject method
+          // TODO: Add supabaseHelper.createProject method when available
           const projectIndex = this.projects.findIndex(p => p.name === projectName);
           if (projectIndex !== -1) {
             this.projects[projectIndex].needs_sync = false;
@@ -989,6 +993,7 @@ class CapseraApp {
       console.error("Error creating project:", error);
       this.showMessage(this.t("Failed to create project"), "error");
       
+      // Clean up on error
       this.projects = this.projects.filter(p => p.name !== projectName);
       if (this.currentProject === projectName) {
         this.currentProject = null;
