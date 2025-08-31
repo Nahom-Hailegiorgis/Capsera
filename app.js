@@ -1,4 +1,4 @@
-// app.js - Enhanced Capsera PWA with dynamic forms and compact UI
+// app.js - Enhanced Capsera PWA with dynamic forms and comprehensive translation
 import { dbHelper } from "./db.js";
 import { supabaseHelper } from "./supabase.js";
 import { validation } from "./validation.js";
@@ -41,12 +41,12 @@ class CapseraApp {
     window.addEventListener("online", () => {
       this.isOnline = true;
       this.syncOfflineData();
-      this.showMessage("Connection restored", "success");
+      this.showMessage(this.t("Connection restored"), "success");
     });
 
     window.addEventListener("offline", () => {
       this.isOnline = false;
-      this.showMessage("Working offline", "warning");
+      this.showMessage(this.t("Working offline"), "warning");
     });
 
     // Service worker messages
@@ -57,6 +57,19 @@ class CapseraApp {
         }
       });
     }
+  }
+
+  // Translation helper method
+  t(key) {
+    if (!this.translations || !this.translations.ui) {
+      return key;
+    }
+    const translated = this.translations.ui[key];
+    if (!translated) {
+      console.warn(`🌐 Missing translation for "${key}"`);
+      return key;
+    }
+    return translated;
   }
 
   setupDOMEventListeners() {
@@ -145,12 +158,12 @@ class CapseraApp {
     }
   }
 
-  // Screen 1: Ideas List (unchanged)
+  // Screen 1: Ideas List
   async loadIdeasScreen() {
     const container = document.getElementById("ideas-list");
     if (!container) return;
 
-    container.innerHTML = '<div class="loading">Loading ideas...</div>';
+    container.innerHTML = `<div class="loading">${this.t("Loading ideas...")}</div>`;
 
     try {
       if (this.isOnline) {
@@ -174,7 +187,7 @@ class CapseraApp {
     if (!container) return;
 
     if (this.ideas.length === 0) {
-      container.innerHTML = '<div class="text-center">No ideas found</div>';
+      container.innerHTML = `<div class="text-center">${this.t("No ideas found")}</div>`;
       return;
     }
 
@@ -197,26 +210,26 @@ class CapseraApp {
   getFeedbackFormHTML() {
     return `
       <div class="feedback-section">
-        <h3>Share Your Feedback</h3>
+        <h3>${this.t("Share Your Feedback")}</h3>
         <form id="feedback-form" class="feedback-form">
           <div class="form-group">
-            <label class="form-label">How can we improve Capsera?</label>
+            <label class="form-label">${this.t("How can we improve Capsera?")}</label>
             <textarea id="feedback-message" class="form-textarea auto-expand" 
-                     placeholder="Tell us what you think..."></textarea>
+                     placeholder="${this.t("Tell us what you think...")}"></textarea>
           </div>
           <div class="form-group">
-            <label class="form-label">Contact (Optional)</label>
+            <label class="form-label">${this.t("Contact (Optional)")}</label>
             <input type="text" id="feedback-contact" class="form-input" 
-                   placeholder="Email or phone (optional)">
+                   placeholder="${this.t("Email or phone (optional)")}">
           </div>
-          <button type="submit" class="btn btn-primary">Submit Feedback</button>
+          <button type="submit" class="btn btn-primary">${this.t("Submit Feedback")}</button>
         </form>
       </div>
     `;
   }
 
   setupFeedbackForm() {
-    // Setup feedback form (existing logic with validation name-based approach)
+    // Setup feedback form with translation support
     const trySetupForm = () => {
       const form = document.getElementById("feedback-form");
       if (!form) return false;
@@ -234,15 +247,14 @@ class CapseraApp {
         const message = messageInput?.value?.trim();
         const contact = contactInput?.value?.trim();
 
-        // Name-based validation instead of HTML5 required attribute
         if (!message) {
-          this.showMessage("feedback_message is required", "error");
+          this.showMessage(this.t("Please enter your feedback message"), "error");
           return;
         }
 
-        const originalText = submitButton?.textContent || "Submit Feedback";
+        const originalText = submitButton?.textContent || this.t("Submit Feedback");
         if (submitButton) {
-          submitButton.textContent = "Submitting...";
+          submitButton.textContent = this.t("Submitting...");
           submitButton.disabled = true;
         }
 
@@ -257,11 +269,11 @@ class CapseraApp {
           // TODO: Call supabaseHelper.submitFeedback(feedbackData)
           // const result = await supabaseHelper.submitFeedback(feedbackData);
 
-          this.showMessage("Thank you for your feedback!", "success");
+          this.showMessage(this.t("Thank you for your feedback!"), "success");
           newForm.reset();
         } catch (error) {
           console.error("Feedback submission failed:", error);
-          this.showMessage("Failed to submit feedback. Please try again.", "error");
+          this.showMessage(this.t("Failed to submit feedback. Please try again."), "error");
         } finally {
           if (submitButton) {
             submitButton.textContent = originalText;
@@ -287,11 +299,11 @@ class CapseraApp {
     modal.innerHTML = `
       <div class="modal-content">
         <div class="modal-header">
-          <h3>Idea Details</h3>
+          <h3>${this.t("Idea Details")}</h3>
           <button onclick="this.closest('.modal-overlay').remove()">×</button>
         </div>
         <div class="modal-body">
-          <div class="loading">Loading details...</div>
+          <div class="loading">${this.t("Loading details...")}</div>
         </div>
       </div>
     `;
@@ -300,35 +312,35 @@ class CapseraApp {
 
     try {
       // TODO: Call supabaseHelper.getIdeaDetails(ideaId)
-      const result = { restricted: true, message: "Detailed view coming soon!" };
+      const result = { restricted: true, message: this.t("Detailed view coming soon!") };
 
       const modalBody = modal.querySelector(".modal-body");
 
       if (result.restricted) {
         modalBody.innerHTML = `
           <div class="text-center">
-            <p>${result.message || "Detailed view is not available at this time."}</p>
+            <p>${result.message || this.t("Detailed view is not available at this time.")}</p>
           </div>
         `;
       } else {
         const idea = result.data;
         modalBody.innerHTML = `
           <div class="idea-details">
-            <h4>Customer Profile</h4>
+            <h4>${this.t("Customer Profile")}</h4>
             <p>${this.escapeHtml(idea.ideal_customer_profile)}</p>
             
-            <h4>Product Idea</h4>
+            <h4>${this.t("Product Idea")}</h4>
             <p>${this.escapeHtml(idea.product_idea)}</p>
             
-            <h4>Pain Points</h4>
+            <h4>${this.t("Pain Points")}</h4>
             <p>${this.escapeHtml(idea.pain_points)}</p>
             
-            <h4>Alternatives</h4>
+            <h4>${this.t("Alternatives")}</h4>
             <p>${this.escapeHtml(idea.alternatives)}</p>
             
             <div class="idea-meta">
-              Categories: ${Array.isArray(idea.category) ? idea.category.join(", ") : idea.category || "None"} • 
-              Quality Score: ${idea.quality_score}/100
+              ${this.t("Categories")}: ${Array.isArray(idea.category) ? idea.category.join(", ") : idea.category || "None"} • 
+              ${this.t("Quality Score")}: ${idea.quality_score}/100
             </div>
             
             ${this.renderAIFeedback(idea.ai_feedback)}
@@ -346,12 +358,12 @@ class CapseraApp {
     const container = document.getElementById("submissions-list");
     if (!container) return;
 
-    container.innerHTML = '<div class="loading">Loading submissions...</div>';
+    container.innerHTML = `<div class="loading">${this.t("Loading submissions...")}</div>`;
 
     const drafts = await dbHelper.getAllDrafts();
 
     if (drafts.length === 0) {
-      container.innerHTML = '<div class="text-center">No submissions yet</div>';
+      container.innerHTML = `<div class="text-center">${this.t("No submissions yet")}</div>`;
       return;
     }
 
@@ -419,7 +431,7 @@ class CapseraApp {
   }
 
   renderSubmissionItem(draft, projectName) {
-    const statusText = draft.is_final ? "Final Submission" : `Draft v${draft.version}`;
+    const statusText = draft.is_final ? this.t("Final Submission") : `${this.t("Draft")} v${draft.version}`;
     const statusClass = draft.is_final ? "success" : "warning";
     const aiScore = draft.ai_feedback?.overall_score || draft.ai_feedback?.score;
 
@@ -435,7 +447,7 @@ class CapseraApp {
     `;
   }
 
-  // Screen 3: Enhanced Submit Ideas with Dynamic Forms
+  // Screen 3: Enhanced Submit Ideas with Dynamic Forms and Translation
   loadSubmitScreen() {
     this.updateGreeting();
     this.setupSubmitForm();
@@ -456,22 +468,21 @@ class CapseraApp {
         `Let's build something amazing, ${userName}!`
       ];
       const randomGreeting = greetings[Math.floor(Math.random() * greetings.length)];
-      greetingElement.textContent = randomGreeting;
+      
+      // Try to translate the greeting, fallback to English if translation not available
+      const translatedGreeting = this.translations?.ui[randomGreeting] || randomGreeting;
+      greetingElement.textContent = translatedGreeting;
     }
   }
 
   async checkCooldownStatus() {
     if (!this.currentUser || !this.currentProject) return;
 
-    // TODO: Check first_draft_submitted_at from database
-    // const drafts = await dbHelper.getDraftsByUserAndProject(this.currentUser, this.currentProject);
-    // const firstDraft = drafts.find(d => d.version === 1);
-    
     const cooldownElement = document.getElementById("cooldown-message");
     const cooldownDaysElement = document.getElementById("cooldown-days");
     
     // Placeholder logic - replace with actual database check
-    const showCooldown = false; // Replace with actual cooldown check
+    const showCooldown = false;
     
     if (showCooldown) {
       const cooldownDays = window.ENV.DRAFT_COOLDOWN_DAYS || 7;
@@ -556,7 +567,7 @@ class CapseraApp {
   }
 
   async createNewProject() {
-    const projectName = prompt("What's your project name?");
+    const projectName = prompt(this.t("Enter project name:"));
     if (!projectName) return;
 
     this.currentProject = projectName;
@@ -577,7 +588,7 @@ class CapseraApp {
     });
 
     await this.setupProjectSelectOptions();
-    this.showMessage(`Project "${projectName}" created!`, "success");
+    this.showMessage(`${this.t("Project created")}: "${projectName}"!`, "success");
   }
 
   async setupProjectSelectOptions() {
@@ -588,8 +599,8 @@ class CapseraApp {
     const projects = [...new Set(userDrafts.map((d) => d.project_name || "Default Project"))];
 
     projectSelect.innerHTML = `
-      <option value="">Select Project</option>
-      <option value="new">Create New Project</option>
+      <option value="">${this.t("Select Project")}</option>
+      <option value="new">${this.t("Create New Project")}</option>
       ${projects.map(project => `
         <option value="${this.escapeHtml(project)}" ${project === this.currentProject ? "selected" : ""}>
           ${this.escapeHtml(project)}
@@ -605,8 +616,8 @@ class CapseraApp {
     const users = await dbHelper.getAllUsers();
 
     userSelect.innerHTML = `
-      <option value="">Select User</option>
-      <option value="new">Create New User</option>
+      <option value="">${this.t("Select User")}</option>
+      <option value="new">${this.t("Create New User")}</option>
       ${users.map(user => `
         <option value="${this.escapeHtml(user.full_name)}">${this.escapeHtml(user.full_name)}</option>
       `).join("")}
@@ -629,23 +640,23 @@ class CapseraApp {
         const words = input.value.trim().split(/\s+/).filter((w) => w.length > 0);
         const count = words.length;
 
-        counter.textContent = `${count} words (${min}-${max})`;
+        counter.innerHTML = `${count} <span data-ui-key="words">${this.t("words")}</span> (${min}-${max})`;
         counter.className = count > max ? "word-counter over-limit" : "word-counter";
       }
     });
   }
 
-  // Enhanced submission handling with draft progression
+  // Enhanced submission handling with draft progression and translation
   async handleSubmission(e) {
     e.preventDefault();
 
     if (!this.currentUser) {
-      this.showMessage("Please select who you are first!", "error");
+      this.showMessage(this.t("Please select or create a user first"), "error");
       return;
     }
 
     if (!this.currentProject) {
-      this.showMessage("Please select or create a project", "error");
+      this.showMessage(this.t("Please select or create a project"), "error");
       return;
     }
 
@@ -653,7 +664,7 @@ class CapseraApp {
     const categorySelect = document.getElementById("category");
     const selectedCategories = Array.from(categorySelect.selectedOptions).map(option => option.value);
 
-    // Build submission object with field names for validation
+    // Build submission object
     const submission = {
       device_id: dbHelper.getDeviceId(),
       full_name: this.currentUser,
@@ -664,17 +675,15 @@ class CapseraApp {
       alternatives: formData.get("alternatives"),
       category: selectedCategories,
       heard_about: formData.get("heard_about"),
-      // Draft 2 fields
       market_validation: formData.get("market_validation"),
       competitor_research: formData.get("competitor_research"),
       mvp_development: formData.get("mvp_development"),
-      // Draft 3 fields
       investor_pitch: formData.get("investor_pitch"),
       additional_research: formData.get("additional_research"),
       mvp_link: formData.get("mvp_link"),
     };
 
-    // Validate using field names instead of HTML5 required
+    // Validate submission
     const validationResult = await validation.validateSubmission(submission, this.ideas);
 
     if (!validationResult.passed) {
@@ -693,23 +702,19 @@ class CapseraApp {
     try {
       if (attemptNumber <= 2) {
         // Draft submissions
-        // TODO: const aiFeedback = await supabaseHelper.getAIFeedback(submission);
-        // submission.ai_feedback = aiFeedback;
-
         if (attemptNumber === 1) {
-          // TODO: Store first_draft_submitted_at timestamp in database
           submission.first_draft_submitted_at = new Date().toISOString();
         }
 
         await dbHelper.saveDraft(submission);
         
-        this.showMessage(`Draft ${attemptNumber} saved! AI feedback coming soon.`, "success");
+        this.showMessage(`${this.t("Draft")} ${attemptNumber} ${this.t("saved")}! AI feedback coming soon.`, "success");
         this.clearForm();
         this.checkCooldownStatus();
         
       } else if (attemptNumber === 3) {
         // Final submission
-        const confirmed = confirm("This is your final submission! Are you sure you're ready?");
+        const confirmed = confirm(this.t("This is your final submission! Are you sure you're ready?"));
         
         if (!confirmed) return;
 
@@ -723,19 +728,19 @@ class CapseraApp {
         }
 
         await dbHelper.saveDraft(submission);
-        this.showMessage("Idea submitted successfully! Thank you!", "success");
+        this.showMessage(this.t("Idea submitted successfully! Thank you!"), "success");
         this.clearForm();
         
       } else {
-        this.showMessage("Maximum submissions reached for this project.", "error");
+        this.showMessage(this.t("Maximum submissions reached for this project."), "error");
       }
     } catch (error) {
       console.error("Submission error:", error);
-      this.showMessage(`Submission failed: ${error.message}`, "error");
+      this.showMessage(`${this.t("Submission failed")}: ${error.message}`, "error");
     }
   }
 
-  // Enhanced AI Feedback Rendering
+  // Enhanced AI Feedback Rendering with Translation
   renderAIFeedback(feedback) {
     if (!feedback) return "";
 
@@ -750,7 +755,7 @@ class CapseraApp {
     return `
       <div class="ai-feedback-compact">
         <div class="feedback-header">
-          <span class="ai-badge">AI Analysis</span>
+          <span class="ai-badge">${this.t("AI Analysis")}</span>
           <span class="score-badge">${feedback.overall_score}/100</span>
         </div>
         <div class="feedback-summary">
@@ -768,7 +773,7 @@ class CapseraApp {
     return `
       <div class="ai-feedback-compact">
         <div class="feedback-header">
-          <span class="ai-badge">AI Feedback</span>
+          <span class="ai-badge">${this.t("AI Feedback")}</span>
           <span class="score-badge">${feedback.score}/100</span>
         </div>
         <div class="feedback-summary">
@@ -783,7 +788,7 @@ class CapseraApp {
     `;
   }
 
-  // Screen 4: Settings (simplified)
+  // Screen 4: Settings with Enhanced Translation Support
   async loadSettingsScreen() {
     this.renderLanguageSelector();
     await this.loadUsersList();
@@ -814,7 +819,7 @@ class CapseraApp {
         <div class="modal-body">
           <div class="loading">
             <div class="loading-spinner"></div>
-            <p>Updating language...</p>
+            <p>${this.t("Updating language...")}</p>
           </div>
         </div>
       </div>
@@ -827,11 +832,11 @@ class CapseraApp {
         this.translations = await translator.getTranslations(lang);
         translator.applyTranslations(this.translations);
         this.renderLanguageSelector();
-        this.showMessage("Language updated!", "success");
+        this.showMessage(this.t("Language updated successfully"), "success");
       }
     } catch (error) {
       console.error("Language update failed:", error);
-      this.showMessage("Failed to update language", "error");
+      this.showMessage(this.t("Failed to update language"), "error");
     } finally {
       loadingOverlay.remove();
     }
@@ -842,12 +847,11 @@ class CapseraApp {
     if (!container) return;
 
     try {
-      // TODO: const users = await supabaseHelper.getAllUsers();
       const localUsers = await dbHelper.getAllUsers();
-      const allUsers = localUsers; // Combine with remote users when available
+      const allUsers = localUsers;
 
       if (allUsers.length === 0) {
-        container.innerHTML = '<div class="text-center">No users found</div>';
+        container.innerHTML = `<div class="text-center">${this.t("No users found")}</div>`;
         return;
       }
 
@@ -855,7 +859,7 @@ class CapseraApp {
         <div class="user-item">
           <span>${this.escapeHtml(user.full_name)}</span>
           <button class="btn btn-danger btn-sm" onclick="app.deleteUser('${user.full_name}')">
-            Delete
+            ${this.t("Delete")}
           </button>
         </div>
       `).join("");
@@ -867,7 +871,7 @@ class CapseraApp {
     }
   }
 
-  // Utility methods
+  // Utility methods with translation support
   async syncOfflineData() {
     if (!this.isOnline) return;
 
@@ -876,8 +880,6 @@ class CapseraApp {
 
     for (const item of queue) {
       try {
-        // TODO: await supabaseHelper.submitFinalIdea(item);
-        // TODO: await supabaseHelper.createUser(item.full_name);
         await dbHelper.removeFromSyncQueue(item.key);
         syncedCount++;
       } catch (error) {
@@ -921,7 +923,6 @@ class CapseraApp {
     const form = document.getElementById("submit-form");
     if (form) {
       form.reset();
-      // Reset auto-expand textareas
       form.querySelectorAll(".auto-expand").forEach(textarea => {
         textarea.style.height = "auto";
         this.autoExpandTextarea(textarea);
@@ -932,34 +933,32 @@ class CapseraApp {
   }
 
   async deleteUser(fullName) {
-    const pin = prompt("Enter your 4-digit PIN:");
+    const pin = prompt(this.t("Enter your 4-digit PIN:"));
     if (!pin || pin.length !== 4) return;
 
     const localUser = await dbHelper.getUser(fullName);
     if (!localUser || dbHelper.hashPin(pin) !== localUser.pin_hash) {
-      this.showMessage("Invalid PIN", "error");
+      this.showMessage(this.t("Invalid PIN"), "error");
       return;
     }
 
     try {
       await dbHelper.deleteUser(fullName);
-      // TODO: if (this.isOnline) await supabaseHelper.deleteUser(fullName);
-      
-      this.showMessage("User deleted", "success");
+      this.showMessage(this.t("User deleted"), "success");
       this.loadUsersList();
     } catch (error) {
       console.error("Delete user error:", error);
-      this.showMessage("Failed to delete user", "error");
+      this.showMessage(this.t("Failed to delete user"), "error");
     }
   }
 
   async showUserCreationForm() {
-    const name = prompt("What's your full name?");
+    const name = prompt(this.t("What's your full name?"));
     if (!name) return;
 
-    const pin = prompt("Create a 4-digit PIN:");
+    const pin = prompt(this.t("Create a 4-digit PIN:"));
     if (!pin || pin.length !== 4 || !/^\d{4}$/.test(pin)) {
-      this.showMessage("PIN must be exactly 4 digits", "error");
+      this.showMessage(this.t("PIN must be exactly 4 digits"), "error");
       return;
     }
 
@@ -970,11 +969,11 @@ class CapseraApp {
     this.setupUserSelectOptions();
     this.setupProjectSelectOptions();
     this.updateGreeting();
-    this.showMessage(`Welcome, ${name}!`, "success");
+    this.showMessage(`${this.t("User created")}: ${name}!`, "success");
   }
 
   async selectExistingUser(fullName) {
-    const pin = prompt("Enter your PIN:");
+    const pin = prompt(this.t("Enter your PIN:"));
     if (!pin) {
       this.resetUserDropdownToPrevious();
       return;
@@ -982,7 +981,7 @@ class CapseraApp {
 
     const localUser = await dbHelper.getUser(fullName);
     if (!localUser || dbHelper.hashPin(pin) !== localUser.pin_hash) {
-      this.showMessage("Invalid PIN", "error");
+      this.showMessage(this.t("Invalid PIN"), "error");
       this.resetUserDropdownToPrevious();
       return;
     }
@@ -990,7 +989,7 @@ class CapseraApp {
     this.currentUser = fullName;
     this.currentProject = null;
     await this.setupProjectSelectOptions();
-    this.showMessage(`Welcome back, ${fullName}!`, "success");
+    this.showMessage(`${this.t("Welcome back")}, ${fullName}!`, "success");
   }
 
   resetUserDropdownToPrevious() {
@@ -1001,7 +1000,7 @@ class CapseraApp {
     
     const projectSelect = document.getElementById("project-select");
     if (projectSelect) {
-      projectSelect.innerHTML = '<option value="">Select Project</option>';
+      projectSelect.innerHTML = `<option value="">${this.t("Select Project")}</option>`;
       this.currentProject = null;
     }
   }
