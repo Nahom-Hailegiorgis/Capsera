@@ -1,10 +1,10 @@
 // edge-functions/get-idea-details.js
-// Enhanced Supabase Edge Function with comprehensive security, structured AI feedback support, and orphan prevention
+// Enhanced Supabase Edge Function with comprehensive security and structured AI feedback support
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
-import { corsHeaders } from "../_shared/cors.js";
+import { corsHeaders } from "../_shared/cors.js"; // ✅ Fixed: Changed from .ts to .js
 
-// Process AI feedback with enhanced validation
+// ✅ Fixed: Move processAIFeedback outside of serve function
 function processAIFeedback(aiFeedback) {
   if (!aiFeedback) return null;
 
@@ -174,7 +174,7 @@ Deno.serve(async (req) => {
 
     console.log(`🔐 [${requestId}] Supabase client initialized`);
 
-    // 5. Enhanced Fetch Idea Details with Orphan Prevention and New Fields
+    // 5. Fetch Idea Details with Security Filters
     console.log(`🔐 [${requestId}] Fetching idea details for: ${idea_id}`);
 
     const { data, error } = await supabase
@@ -184,7 +184,6 @@ Deno.serve(async (req) => {
         id,
         device_id,
         full_name,
-        user_uuid,
         version,
         is_final,
         ideal_customer_profile,
@@ -195,16 +194,7 @@ Deno.serve(async (req) => {
         heard_about,
         ai_feedback,
         quality_score,
-        draft_number,
-        previous_score,
-        first_draft_submitted_at,
-        last_submission_at,
-        created_at,
-        users!user_uuid (
-          id,
-          full_name,
-          deleted_at
-        )
+        created_at
       `
       )
       .eq("id", idea_id)
@@ -212,7 +202,7 @@ Deno.serve(async (req) => {
       .limit(1)
       .single();
 
-    // 6. Handle Database Response with Orphan Checking
+    // 6. Handle Database Response
     if (error) {
       console.error(`🔐 [${requestId}] Database error:`, error);
 
@@ -239,6 +229,7 @@ Deno.serve(async (req) => {
         );
       }
 
+      // Other database errors
       return new Response(
         JSON.stringify({
           error: "database_error",
@@ -276,40 +267,16 @@ Deno.serve(async (req) => {
       );
     }
 
-    // 7. Orphan Prevention Check - Verify user still exists and is not deleted
-    if (data.user_uuid && data.users && data.users.deleted_at) {
-      console.log(`🔐 [${requestId}] Idea belongs to deleted user, hiding: ${idea_id}`);
-
-      return new Response(
-        JSON.stringify({
-          error: "not_found",
-          message: "Idea not found or not available",
-          request_id: requestId,
-          reason: "user_deleted", // For debugging only, not shown to end users
-        }),
-        {
-          status: 404,
-          headers: {
-            ...corsHeaders,
-            "Content-Type": "application/json",
-            "X-Request-ID": requestId,
-          },
-        }
-      );
-    }
-
-    // 8. Data Processing and Sanitization with Enhanced AI Feedback Support
+    // 7. Data Processing and Sanitization with Enhanced AI Feedback Support
     const processedData = {
       ...data,
-      // Remove user join data from response (keep only basic info)
-      users: undefined,
       // Ensure category is properly formatted as array
       category: Array.isArray(data.category)
         ? data.category
         : data.category
         ? [data.category]
         : [],
-      // Process AI feedback
+      // ✅ Fixed: Removed 'this.' and call function directly
       ai_feedback: data.ai_feedback
         ? processAIFeedback(data.ai_feedback)
         : null,
@@ -319,14 +286,13 @@ Deno.serve(async (req) => {
       request_id: requestId,
     };
 
-    // 9. Comprehensive Logging with Enhanced Tracking Info
+    // 8. Comprehensive Logging with AI Feedback Details
     const processingTime = Date.now() - startTime;
     const aiScore =
       data.ai_feedback?.overall_score || data.ai_feedback?.score || "N/A";
 
     console.log(`🔐 [${requestId}] Idea details accessed successfully`);
     console.log(`🔐 [${requestId}] Idea: ${idea_id} by ${data.full_name}`);
-    console.log(`🔐 [${requestId}] Draft: ${data.draft_number || 1}, Previous score: ${data.previous_score || "N/A"}`);
     console.log(`🔐 [${requestId}] Quality score: ${data.quality_score}/100`);
     console.log(`🔐 [${requestId}] AI score: ${aiScore}/100`);
     console.log(
@@ -337,7 +303,6 @@ Deno.serve(async (req) => {
     console.log(
       `🔐 [${requestId}] Categories: ${JSON.stringify(data.category)}`
     );
-    console.log(`🔐 [${requestId}] User UUID: ${data.user_uuid || "none"}`);
     console.log(`🔐 [${requestId}] Client IP: ${clientIP}`);
     console.log(`🔐 [${requestId}] Processing time: ${processingTime}ms`);
 
@@ -354,7 +319,6 @@ Deno.serve(async (req) => {
           ai_feedback_type: data.ai_feedback?.critique
             ? "structured"
             : "legacy",
-          draft_number: data.draft_number || 1,
           timestamp: new Date().toISOString(),
         },
       ]);
@@ -363,7 +327,7 @@ Deno.serve(async (req) => {
       console.warn(`🔐 [${requestId}] Failed to log access:`, logError);
     }
 
-    // 10. Return Success Response
+    // 9. Return Success Response
     return new Response(JSON.stringify(processedData), {
       status: 200,
       headers: {
@@ -371,7 +335,7 @@ Deno.serve(async (req) => {
         "Content-Type": "application/json",
         "X-Request-ID": requestId,
         "X-Processing-Time": `${processingTime}ms`,
-        "Cache-Control": "private, max-age=300, must-revalidate",
+        "Cache-Control": "private, max-age=300, must-revalidate", // 5 minutes cache
         Vary: "Authorization",
       },
     });
