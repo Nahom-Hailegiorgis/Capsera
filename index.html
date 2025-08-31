@@ -3,7 +3,6 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta name="app-version" content="v1.2.3">
   <title>Capsera - Idea Submission Platform</title>
   <link rel="manifest" href="/manifest.json">
   <link rel="icon" type="image/x-icon" href="/favicon.ico">
@@ -31,334 +30,159 @@
     <!-- Screen 1: Ideas List -->
     <div id="ideas-screen" class="screen active">
       <h2 data-ui-key="Ideas">Ideas</h2>
-      <!-- Added wrapper div for better styling control -->
-      <div class="ideas-container">
-        <div id="ideas-list" class="ideas-list">
-          <div class="loading" data-ui-key="Loading ideas...">Loading ideas...</div>
-        </div>
+      <div id="ideas-list">
+        <div class="loading" data-ui-key="Loading...">Loading...</div>
       </div>
     </div>
 
-    <!-- Screen 2: My Submissions - Compact Design -->
+    <!-- Screen 2: My Submissions -->
     <div id="submissions-screen" class="screen">
       <h2 data-ui-key="My Submissions">My Submissions</h2>
       <div id="submissions-list">
-        <div class="loading" data-ui-key="Loading submissions...">Loading submissions...</div>
+        <div class="loading" data-ui-key="Loading...">Loading...</div>
       </div>
     </div>
 
-    <!-- Screen 3: Submit Ideas - Dynamic Forms -->
+    <!-- Screen 3: Submit Ideas -->
     <div id="submit-screen" class="screen">
-      <div id="greeting-section" class="greeting-section">
-        <h2 id="greeting-text" data-ui-key="Hey there! Ready to share your idea?">Hey there! Ready to share your idea?</h2>
-        <div class="info-tip">
-          <span class="info-icon">💡</span>
-          <span class="info-text" data-ui-key="We rate ideas kindly — see tips below for better scores!">We rate ideas kindly — see tips below for better scores!</span>
-        </div>
-      </div>
-
-      <!-- Cooldown Message -->
-      <div id="cooldown-message" class="cooldown-message hidden">
-        <div class="cooldown-content">
-          <h3>🕒 <span data-ui-key="Research Time!">Research Time!</span></h3>
-          <p data-ui-key="Please conduct customer interviews and market research.">Please conduct customer interviews and market research.</p>
-          <p><strong><span data-ui-key="Next submission available in:">Next submission available in:</span> <span id="cooldown-days"></span> <span data-ui-key="days">days</span></strong></p>
-          <div class="cooldown-tips">
-            <strong data-ui-key="Suggested activities:">Suggested activities:</strong>
-            <ul>
-              <li data-ui-key="Interview 5-10 potential customers">Interview 5-10 potential customers</li>
-              <li data-ui-key="Research existing competitors thoroughly">Research existing competitors thoroughly</li>
-              <li data-ui-key="Create a basic prototype or mockup">Create a basic prototype or mockup</li>
-            </ul>
-          </div>
-        </div>
-      </div>
+      <h2 data-ui-key="Submit Ideas">Submit Ideas</h2>
 
       <!-- User and Project Selection -->
       <div class="user-project-selection">
         <div class="form-group">
-          <label class="form-label" data-ui-key="Who are you?">Who are you?</label>
-          <select id="user-select" class="form-select">
-            <option value="" data-ui-key="Select User">Select User</option>
+          <label class="form-label">Select User</label>
+          <select id="user-select" class="form-select" required>
+            <option value="">Select User</option>
           </select>
         </div>
         
         <div class="form-group">
-          <label class="form-label" data-ui-key="Which project?">Which project?</label>
-          <select id="project-select" class="form-select">
-            <option value="" data-ui-key="Select Project">Select Project</option>
+          <label class="form-label">Select Project</label>
+          <select id="project-select" class="form-select" required>
+            <option value="">Select Project</option>
           </select>
         </div>
       </div>
 
-      <!-- Draft Selection for Final Submission -->
-      <div id="draft-sidebar" class="draft-sidebar hidden">
-        <div class="sidebar-content">
-          <h4 data-ui-key="Previous Drafts">Previous Drafts</h4>
-          <div id="draft-selector">
-            <!-- Populated by JS -->
+      <form id="submit-form">
+        <!-- Customer Profile -->
+        <div class="form-group">
+          <label class="form-label" data-ui-key="Required">
+            Ideal Customer Profile <span class="required">*</span>
+          </label>
+          <div class="input-with-icon" data-tooltip-key="ideal_customer_profile">
+            <textarea id="ideal_customer_profile" name="ideal_customer_profile" 
+                     class="form-textarea" required
+                     placeholder="Describe who would use your product..."></textarea>
+            <span class="tooltip-icon">👁️
+              <span class="tooltip-text">
+                Describe who would use your product - their age, job, problems they face, etc.
+              </span>
+            </span>
           </div>
-          <div id="draft-preview">
-            <!-- Selected draft content -->
-          </div>
+          <div id="ideal_customer_profile-count" class="word-counter">0 words (10-200)</div>
         </div>
-      </div>
 
-      <!-- Main Form -->
-      <div id="main-form-container" class="main-form-container">
-        <form id="submit-form">
-          <!-- Draft 1: Core Questions -->
-          <div id="draft-1-questions" class="draft-questions">
-            <div class="section-header">
-              <h3 data-ui-key="Tell us about your idea">Tell us about your idea</h3>
-            </div>
-
-            <!-- Customer Profile -->
-            <div class="form-group">
-              <label class="form-label">
-                <span data-ui-key="Who would love this?">Who would love this?</span> <span class="field-required">*</span>
-              </label>
-              <div class="input-with-icon">
-                <textarea id="ideal_customer_profile" name="ideal_customer_profile" 
-                         class="form-textarea auto-expand" 
-                         data-ui-key="Describe your target customers - their age, job, daily problems they face..."
-                         placeholder="Describe your target customers - their age, job, daily problems they face..."></textarea>
-                <span class="tooltip-icon">💡
-                  <span class="tooltip-text" data-ui-key="Think specific! Instead of &quot;everyone&quot;, describe who would use this daily - their demographics, pain points, and current behavior.">
-                    Think specific! Instead of "everyone", describe who would use this daily - their demographics, pain points, and current behavior.
-                  </span>
-                </span>
-              </div>
-              <div id="ideal_customer_profile-count" class="word-counter">0 <span data-ui-key="words">words</span> (10-200)</div>
-            </div>
-
-            <!-- Product Idea -->
-            <div class="form-group">
-              <label class="form-label">
-                <span data-ui-key="What's your solution?">What's your solution?</span> <span class="field-required">*</span>
-              </label>
-              <div class="input-with-icon">
-                <textarea id="product_idea" name="product_idea" 
-                         class="form-textarea auto-expand" 
-                         data-ui-key="Explain your product idea clearly - what does it do and how does it help people?"
-                         placeholder="Explain your product idea clearly - what does it do and how does it help people?"></textarea>
-                <span class="tooltip-icon">💡
-                  <span class="tooltip-text" data-ui-key="Focus on the value! Explain what your product does and why people would choose it over existing options.">
-                    Focus on the value! Explain what your product does and why people would choose it over existing options.
-                  </span>
-                </span>
-              </div>
-              <div id="product_idea-count" class="word-counter">0 <span data-ui-key="words">words</span> (15-300)</div>
-            </div>
-
-            <!-- Pain Points -->
-            <div class="form-group">
-              <label class="form-label">
-                <span data-ui-key="What problems does this solve?">What problems does this solve?</span> <span class="field-required">*</span>
-              </label>
-              <div class="input-with-icon">
-                <textarea id="pain_points" name="pain_points" 
-                         class="form-textarea auto-expand" 
-                         data-ui-key="What specific problems or frustrations do your target customers experience?"
-                         placeholder="What specific problems or frustrations do your target customers experience?"></textarea>
-                <span class="tooltip-icon">💡
-                  <span class="tooltip-text" data-ui-key="Be specific about the pain! Describe real problems that keep your customers up at night or waste their time.">
-                    Be specific about the pain! Describe real problems that keep your customers up at night or waste their time.
-                  </span>
-                </span>
-              </div>
-              <div id="pain_points-count" class="word-counter">0 <span data-ui-key="words">words</span> (15-250)</div>
-            </div>
-
-            <!-- Alternatives -->
-            <div class="form-group">
-              <label class="form-label">
-                <span data-ui-key="What alternatives exist?">What alternatives exist?</span> <span class="field-required">*</span>
-              </label>
-              <div class="input-with-icon">
-                <textarea id="alternatives" name="alternatives" 
-                         class="form-textarea auto-expand" 
-                         data-ui-key="What similar products or solutions already exist? How is yours different?"
-                         placeholder="What similar products or solutions already exist? How is yours different?"></textarea>
-                <span class="tooltip-icon">💡
-                  <span class="tooltip-text" data-ui-key="Know your competition! List existing solutions and explain why yours is better or different.">
-                    Know your competition! List existing solutions and explain why yours is better or different.
-                  </span>
-                </span>
-              </div>
-              <div id="alternatives-count" class="word-counter">0 <span data-ui-key="words">words</span> (5-200)</div>
-            </div>
-
-            <!-- Category -->
-            <div class="form-group">
-              <label class="form-label">
-                <span data-ui-key="Categories">Categories</span> <span class="optional">(<span data-ui-key="Hold CTRL to select multiple">Hold CTRL to select multiple</span>)</span>
-              </label>
-              <select id="category" name="category" class="form-select" multiple>
-                <option value="Technology" data-ui-key="Technology">Technology</option>
-                <option value="Healthcare" data-ui-key="Healthcare">Healthcare</option>
-                <option value="Education" data-ui-key="Education">Education</option>
-                <option value="Finance" data-ui-key="Finance">Finance</option>
-                <option value="Entertainment" data-ui-key="Entertainment">Entertainment</option>
-                <option value="Food & Beverage" data-ui-key="Food & Beverage">Food & Beverage</option>
-                <option value="Transportation" data-ui-key="Transportation">Transportation</option>
-                <option value="Communication" data-ui-key="Communication">Communication</option>
-                <option value="Productivity" data-ui-key="Productivity">Productivity</option>
-                <option value="Social Impact" data-ui-key="Social Impact">Social Impact</option>
-                <option value="E-commerce" data-ui-key="E-commerce">E-commerce</option>
-                <option value="Gaming" data-ui-key="Gaming">Gaming</option>
-                <option value="Travel" data-ui-key="Travel">Travel</option>
-                <option value="Fitness & Wellness" data-ui-key="Fitness & Wellness">Fitness & Wellness</option>
-                <option value="Environment" data-ui-key="Environment">Environment</option>
-                <option value="Other" data-ui-key="Other">Other</option>
-              </select>
-            </div>
-
-            <!-- Heard About -->
-            <div class="form-group">
-              <label class="form-label">
-                <span data-ui-key="How did you find us?">How did you find us?</span> <span class="optional">(<span data-ui-key="Optional">Optional</span>)</span>
-              </label>
-              <select id="heard_about" name="heard_about" class="form-select">
-                <option value="" data-ui-key="Select...">Select...</option>
-                <option value="Social Media" data-ui-key="Social Media">Social Media</option>
-                <option value="Friend/Family" data-ui-key="Friend/Family">Friend/Family</option>
-                <option value="Search Engine" data-ui-key="Search Engine">Search Engine</option>
-                <option value="News/Blog" data-ui-key="News/Blog">News/Blog</option>
-                <option value="Advertisement" data-ui-key="Advertisement">Advertisement</option>
-                <option value="Event/Conference" data-ui-key="Event/Conference">Event/Conference</option>
-                <option value="Other" data-ui-key="Other">Other</option>
-              </select>
-            </div>
+        <!-- Product Idea -->
+        <div class="form-group">
+          <label class="form-label" data-ui-key="Required">
+            Product Idea <span class="required">*</span>
+          </label>
+          <div class="input-with-icon" data-tooltip-key="product_idea">
+            <textarea id="product_idea" name="product_idea" 
+                     class="form-textarea" required
+                     placeholder="Explain your product idea..."></textarea>
+            <span class="tooltip-icon">👁️
+              <span class="tooltip-text">
+                Explain your product idea clearly - what does it do and how does it help people?
+              </span>
+            </span>
           </div>
+          <div id="product_idea-count" class="word-counter">0 words (15-300)</div>
+        </div>
 
-          <!-- Draft 2: Market Research Questions -->
-          <div id="draft-2-questions" class="draft-questions hidden">
-            <div class="section-header">
-              <h3 data-ui-key="Let's talk market research">Let's talk market research</h3>
-              <p class="section-subtitle" data-ui-key="Time to validate your idea with real data!">Time to validate your idea with real data!</p>
-            </div>
-
-            <div class="form-group">
-              <label class="form-label">
-                <span data-ui-key="Did you talk to potential customers?">Did you talk to potential customers?</span> <span class="field-required">*</span>
-              </label>
-              <div class="input-with-icon">
-                <textarea id="market_validation" name="market_validation" 
-                         class="form-textarea auto-expand" 
-                         placeholder="Describe your customer interviews, surveys, or other validation methods. What did you learn?"></textarea>
-                <span class="tooltip-icon">💡
-                  <span class="tooltip-text">
-                    Customer interviews are gold! Describe who you talked to, what questions you asked, and what surprised you.
-                  </span>
-                </span>
-              </div>
-            </div>
-
-            <div class="form-group">
-              <label class="form-label">
-                <span data-ui-key="How deep did you research competitors?">How deep did you research competitors?</span> <span class="field-required">*</span>
-              </label>
-              <div class="input-with-icon">
-                <textarea id="competitor_research" name="competitor_research" 
-                         class="form-textarea auto-expand" 
-                         placeholder="List competitors you found, their strengths/weaknesses, and how you'll differentiate. Include links if helpful."></textarea>
-                <span class="tooltip-icon">💡
-                  <span class="tooltip-text">
-                    Know thy enemy! List direct and indirect competitors, analyze their pricing, features, and customer reviews.
-                  </span>
-                </span>
-              </div>
-            </div>
-
-            <div class="form-group">
-              <label class="form-label">
-                <span data-ui-key="Did you build an MVP or prototype?">Did you build an MVP or prototype?</span>
-              </label>
-              <div class="input-with-icon">
-                <textarea id="mvp_development" name="mvp_development" 
-                         class="form-textarea auto-expand" 
-                         placeholder="Describe your MVP/prototype, or explain why you haven't built one yet. No judgment - we want to understand your approach!"></textarea>
-                <span class="tooltip-icon">💡
-                  <span class="tooltip-text">
-                    MVPs can be simple! Even a landing page, mockup, or manual process counts as validation.
-                  </span>
-                </span>
-              </div>
-            </div>
-
-            <div class="form-group">
-              <label class="form-label">
-                <span data-ui-key="Got photos of your product?">Got photos of your product?</span> <span class="optional">(<span data-ui-key="Optional for physical products">Optional for physical products</span>)</span>
-              </label>
-              <input type="file" id="product_photo" name="product_photo" 
-                     class="form-file" accept="image/*">
-              <div class="file-hint" data-ui-key="Upload a photo if you have a physical prototype or mockup">Upload a photo if you have a physical prototype or mockup</div>
-            </div>
+        <!-- Pain Points -->
+        <div class="form-group">
+          <label class="form-label" data-ui-key="Required">
+            Pain Points <span class="required">*</span>
+          </label>
+          <div class="input-with-icon" data-tooltip-key="pain_points">
+            <textarea id="pain_points" name="pain_points" 
+                     class="form-textarea" required
+                     placeholder="What problems does this solve?"></textarea>
+            <span class="tooltip-icon">👁️
+              <span class="tooltip-text">
+                What specific problems or frustrations does your target customer experience?
+              </span>
+            </span>
           </div>
+          <div id="pain_points-count" class="word-counter">0 words (15-250)</div>
+        </div>
 
-          <!-- Draft 3: Final Pitch -->
-          <div id="draft-3-questions" class="draft-questions hidden">
-            <div class="section-header">
-              <h3 data-ui-key="Final pitch time!">Final pitch time!</h3>
-              <p class="section-subtitle" data-ui-key="Show us you're ready to make this happen">Show us you're ready to make this happen</p>
-            </div>
-
-            <div class="pitch-example">
-              <h4>💼 <span data-ui-key="Example Investor Pitch:">Example Investor Pitch:</span></h4>
-              <div class="example-text">
-                "We're building TaskMaster, a project management tool for small creative agencies. Unlike complex tools like Monday.com, TaskMaster focuses on visual workflows that designers actually want to use. We've interviewed 50+ agency owners who spend 2+ hours daily on project coordination. Our beta has 200 users with 40% weekly retention. Seeking $50K to hire a developer and reach 1000+ users in 6 months."
-              </div>
-            </div>
-
-            <div class="form-group">
-              <label class="form-label">
-                <span data-ui-key="Your investor pitch">Your investor pitch</span> <span class="field-required">*</span>
-              </label>
-              <div class="input-with-icon">
-                <textarea id="investor_pitch" name="investor_pitch" 
-                         class="form-textarea auto-expand" 
-                         placeholder="Write your 30-second elevator pitch. What's the opportunity, your solution, early traction, and what you need?"></textarea>
-                <span class="tooltip-icon">💡
-                  <span class="tooltip-text">
-                    Make it punchy! Problem → Solution → Traction → Ask. Keep it under 100 words but pack in the key details.
-                  </span>
-                </span>
-              </div>
-            </div>
-
-            <div class="form-group">
-              <label class="form-label">
-                <span data-ui-key="What research have you done since last time?">What research have you done since last time?</span>
-              </label>
-              <div class="input-with-icon">
-                <textarea id="additional_research" name="additional_research" 
-                         class="form-textarea auto-expand" 
-                         placeholder="Describe any additional customer interviews, market analysis, or validation work you've completed."></textarea>
-                <span class="tooltip-icon">💡
-                  <span class="tooltip-text">
-                    Show your progress! We love seeing continuous learning and iteration based on customer feedback.
-                  </span>
-                </span>
-              </div>
-            </div>
-
-            <div class="form-group">
-              <label class="form-label">
-                <span data-ui-key="MVP or demo link">MVP or demo link</span> <span class="optional">(<span data-ui-key="Optional">Optional</span>)</span>
-              </label>
-              <input type="url" id="mvp_link" name="mvp_link" 
-                     class="form-input" 
-                     placeholder="https://your-demo.com">
-              <div class="file-hint" data-ui-key="Share a link to your working prototype, demo, or landing page">Share a link to your working prototype, demo, or landing page</div>
-            </div>
+        <!-- Alternatives -->
+        <div class="form-group">
+          <label class="form-label" data-ui-key="Required">
+            Alternatives <span class="required">*</span>
+          </label>
+          <div class="input-with-icon" data-tooltip-key="alternatives">
+            <textarea id="alternatives" name="alternatives" 
+                     class="form-textarea" required
+                     placeholder="What similar solutions exist?"></textarea>
+            <span class="tooltip-icon">👁️
+              <span class="tooltip-text">
+                What similar products or solutions already exist? How is yours different?
+              </span>
+            </span>
           </div>
+          <div id="alternatives-count" class="word-counter">0 words (5-200)</div>
+        </div>
 
-          <button type="submit" class="btn btn-primary" id="submit-button" data-ui-key="Submit Draft 1">
-            Submit Draft 1
-          </button>
-        </form>
-      </div>
+        <!-- Category (Multi-select) -->
+        <div class="form-group">
+          <label class="form-label" data-tooltip-key="category">
+            Categories <span class="optional"> | Hold CTRL to select multiple categories!</span>
+          </label>
+          <select id="category" name="category" class="form-select" multiple>
+            <option value="Technology">Technology</option>
+            <option value="Healthcare">Healthcare</option>
+            <option value="Education">Education</option>
+            <option value="Finance">Finance</option>
+            <option value="Entertainment">Entertainment</option>
+            <option value="Food & Beverage">Food & Beverage</option>
+            <option value="Transportation">Transportation</option>
+            <option value="Communication">Communication</option>
+            <option value="Productivity">Productivity</option>
+            <option value="Social Impact">Social Impact</option>
+            <option value="E-commerce">E-commerce</option>
+            <option value="Gaming">Gaming</option>
+            <option value="Travel">Travel</option>
+            <option value="Fitness & Wellness">Fitness & Wellness</option>
+            <option value="Environment">Environment</option>
+            <option value="Other">Other</option>
+          </select>
+        </div>
+
+        <!-- Heard About -->
+        <div class="form-group">
+          <label class="form-label" data-tooltip-key="heard_about">
+            How did you hear about Capsera? <span class="optional">(Optional)</span>
+          </label>
+          <select id="heard_about" name="heard_about" class="form-select">
+            <option value="">Select...</option>
+            <option value="Social Media">Social Media</option>
+            <option value="Friend/Family">Friend/Family</option>
+            <option value="Search Engine">Search Engine</option>
+            <option value="News/Blog">News/Blog</option>
+            <option value="Advertisement">Advertisement</option>
+            <option value="Event/Conference">Event/Conference</option>
+            <option value="Other">Other</option>
+          </select>
+        </div>
+
+        <button type="submit" class="btn btn-primary" data-ui-key="Submit">
+          Submit Idea
+        </button>
+      </form>
     </div>
 
     <!-- Screen 4: Settings -->
@@ -367,7 +191,7 @@
 
       <!-- Language Selection -->
       <div class="settings-section">
-        <h3 data-ui-key="Choose Language">Choose Language</h3>
+        <h3 data-ui-key="Choose language">Choose Language</h3>
         <div id="language-selector" class="language-selector">
           <!-- Language options populated by JS -->
         </div>
@@ -375,7 +199,7 @@
 
       <!-- Users Management -->
       <div class="settings-section">
-        <h3 data-ui-key="Users">Users</h3>
+        <h3>Users</h3>
         <div id="users-list">
           <div class="loading" data-ui-key="Loading...">Loading...</div>
         </div>
@@ -383,9 +207,8 @@
     </div>
   </div>
 
-  <!-- Modal Overlay Template -->
+  <!-- Modal Overlay Template (Created dynamically) -->
   <style>
-    /* Enhanced modal and compact styles */
     .modal-overlay {
       position: fixed;
       top: 0;
@@ -401,10 +224,10 @@
 
     .modal-content {
       background: white;
-      padding: 3%;
+      padding: 4%;
       border-radius: 8px;
-      max-width: 85%;
-      max-height: 85%;
+      max-width: 90%;
+      max-height: 90%;
       overflow-y: auto;
       position: relative;
     }
@@ -413,8 +236,8 @@
       display: flex;
       justify-content: space-between;
       align-items: center;
-      margin-bottom: 2%;
-      padding-bottom: 1%;
+      margin-bottom: 3%;
+      padding-bottom: 2%;
       border-bottom: 1px solid var(--capsera-border);
     }
 
@@ -434,18 +257,119 @@
     .modal-body {
       line-height: 1.6;
     }
+
+    .idea-details h4 {
+      color: var(--capsera-deep);
+      margin-top: 3%;
+      margin-bottom: 1%;
+    }
+
+    .idea-details p {
+      margin-bottom: 2%;
+    }
+
+    .feedback-section {
+      margin-top: 6%;
+      padding-top: 4%;
+      border-top: 2px solid var(--capsera-border);
+    }
+
+    .feedback-section h3 {
+      color: var(--capsera-deep);
+      margin-bottom: 3%;
+    }
+
+    .projects-overview {
+      margin-bottom: 4%;
+      background: var(--capsera-light-gray);
+      padding: 3%;
+      border-radius: 4px;
+    }
+
+    .project-overview {
+      background: white;
+      padding: 2%;
+      margin-bottom: 2%;
+      border-radius: 4px;
+      border-left: 4px solid var(--capsera-accent);
+    }
+
+    .project-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 1%;
+    }
+
+    .project-preview {
+      font-size: 0.9rem;
+      color: #666;
+    }
+
+    .status {
+      padding: 1% 2%;
+      border-radius: 12px;
+      font-size: 0.8rem;
+      font-weight: 500;
+    }
+
+    .status.success {
+      background: #e6ffe6;
+      color: var(--capsera-success);
+    }
+
+    .status.warning {
+      background: #fff7e6;
+      color: #856404;
+    }
+
+    .user-project-selection {
+      background: var(--capsera-light-gray);
+      padding: 4%;
+      border-radius: 8px;
+      margin-bottom: 4%;
+    }
+
+    .required {
+      color: var(--capsera-error);
+    }
+
+    .optional {
+      color: #666;
+      font-weight: normal;
+      font-size: 0.9rem;
+    }
+
+    .settings-section {
+      margin-bottom: 6%;
+    }
+
+    .settings-section h3 {
+      color: var(--capsera-deep);
+      margin-bottom: 3%;
+    }
+
+    @media (min-width: 768px) {
+      .modal-content {
+        max-width: 70%;
+        padding: 3%;
+      }
+      
+      .user-project-selection {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 4%;
+      }
+    }
+
+    @media (min-width: 1024px) {
+      .modal-content {
+        max-width: 60%;
+      }
+    }
   </style>
 
   <!-- Scripts -->
-  <script>
-    window.ENV = {
-      SUPABASE_URL: "https://cboescovlebokpnrsnwp.supabase.co",
-      SUPABASE_ANON_KEY: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNib2VzY292bGVib2twbnJzbndwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTUxMjc0ODAsImV4cCI6MjA3MDcwMzQ4MH0.2mrbRIp7A14hRs_mz37sPshZOrmt0uT9UsM0JWRSvx0",
-      EUREKA: true,
-      EDGE_FUNCTION_URL: "https://cboescovlebokpnrsnwp.supabase.co/functions/v1",
-      DRAFT_COOLDOWN_DAYS: 7 // Configurable cooldown period
-    };
-  </script>
   <script type="module" src="app.js"></script>
 </body>
 </html>
