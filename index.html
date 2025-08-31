@@ -31,8 +31,11 @@
     <!-- Screen 1: Ideas List -->
     <div id="ideas-screen" class="screen active">
       <h2 data-ui-key="Ideas">Ideas</h2>
-      <div id="ideas-list">
-        <div class="loading" data-ui-key="Loading ideas...">Loading ideas...</div>
+      <!-- Added wrapper div for better styling control -->
+      <div class="ideas-container">
+        <div id="ideas-list" class="ideas-list">
+          <div class="loading" data-ui-key="Loading ideas...">Loading ideas...</div>
+        </div>
       </div>
     </div>
 
