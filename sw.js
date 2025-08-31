@@ -1,7 +1,9 @@
 // sw.js - Capsera PWA Service Worker with Offline-First Strategy
-const CACHE_NAME = "capsera-v1.2";
-const STATIC_CACHE_NAME = "capsera-static-v1.2";
-const DYNAMIC_CACHE_NAME = "capsera-dynamic-v1.2";
+// IMPORTANT: Update this version number whenever you deploy new code
+const APP_VERSION = "1.3.0"; // Change this with each deployment
+const CACHE_NAME = `capsera-v${APP_VERSION}`;
+const STATIC_CACHE_NAME = `capsera-static-v${APP_VERSION}`;
+const DYNAMIC_CACHE_NAME = `capsera-dynamic-v${APP_VERSION}`;
 
 // Core app shell assets that should always be cached
 const SHELL_ASSETS = [
@@ -24,18 +26,21 @@ const API_PATTERNS = [
   /\/functions\/v1\//
 ];
 
-// Install event - cache shell assets
+// Install event - cache shell assets and force immediate activation
 self.addEventListener("install", (event) => {
-  console.log("[SW] Installing service worker");
+  console.log("[SW] Installing service worker version:", APP_VERSION);
   
   event.waitUntil(
     caches.open(STATIC_CACHE_NAME)
       .then((cache) => {
         console.log("[SW] Caching shell assets");
-        return cache.addAll(SHELL_ASSETS);
+        // Add cache-busting query params to ensure fresh downloads
+        const cacheBustUrls = SHELL_ASSETS.map(url => `${url}?v=${APP_VERSION}&t=${Date.now()}`);
+        return cache.addAll(cacheBustUrls.concat(SHELL_ASSETS));
       })
       .then(() => {
         console.log("[SW] Shell assets cached successfully");
+        // Force immediate activation - skip waiting
         return self.skipWaiting();
       })
       .catch((error) => {
@@ -44,27 +49,40 @@ self.addEventListener("install", (event) => {
   );
 });
 
-// Activate event - clean up old caches and claim clients
+// Activate event - aggressively clean up old caches and claim clients immediately
 self.addEventListener("activate", (event) => {
-  console.log("[SW] Activating service worker");
+  console.log("[SW] Activating service worker version:", APP_VERSION);
   
   event.waitUntil(
-    caches.keys()
-      .then((cacheNames) => {
+    Promise.all([
+      // Delete ALL old caches, not just versioned ones
+      caches.keys().then((cacheNames) => {
         return Promise.all(
           cacheNames.map((cacheName) => {
             if (cacheName !== STATIC_CACHE_NAME && 
-                cacheName !== DYNAMIC_CACHE_NAME &&
-                cacheName.startsWith("capsera-")) {
+                cacheName !== DYNAMIC_CACHE_NAME) {
               console.log("[SW] Deleting old cache:", cacheName);
               return caches.delete(cacheName);
             }
           })
         );
-      })
+      }),
+      // Immediately claim all clients to force refresh
+      self.clients.claim()
+    ])
       .then(() => {
-        console.log("[SW] Cache cleanup complete");
-        return self.clients.claim();
+        console.log("[SW] Cache cleanup complete, clients claimed");
+        // Notify all clients that a new version is available
+        return self.clients.matchAll();
+      })
+      .then((clients) => {
+        clients.forEach((client) => {
+          client.postMessage({
+            type: "NEW_VERSION_AVAILABLE",
+            version: APP_VERSION,
+            message: "New version available! Please refresh the page."
+          });
+        });
       })
   );
 });
@@ -95,36 +113,41 @@ self.addEventListener("fetch", (event) => {
   event.respondWith(handleOtherRequests(request));
 });
 
-// Cache-first strategy for shell assets
+// Cache-first strategy for shell assets with network update
 async function handleShellAssets(request) {
+  const cache = await caches.open(STATIC_CACHE_NAME);
+  
   try {
-    const cache = await caches.open(STATIC_CACHE_NAME);
-    const cachedResponse = await cache.match(request);
-    
-    if (cachedResponse) {
-      console.log("[SW] Serving shell asset from cache:", request.url);
-      return cachedResponse;
-    }
-
+    // Try network first for shell assets to get updates quickly
     console.log("[SW] Fetching shell asset from network:", request.url);
     const networkResponse = await fetch(request);
     
     if (networkResponse.ok) {
-      cache.put(request, networkResponse.clone());
+      // Cache the new version
+      await cache.put(request, networkResponse.clone());
+      return networkResponse;
     }
-    
-    return networkResponse;
-  } catch (error) {
-    console.error("[SW] Shell asset fetch failed:", error);
-    
-    // Fallback to index.html for navigation requests
-    if (request.destination === "document") {
-      const cache = await caches.open(STATIC_CACHE_NAME);
-      return cache.match("/index.html");
-    }
-    
-    throw error;
+  } catch (networkError) {
+    console.log("[SW] Network failed for shell asset, trying cache:", request.url);
   }
+  
+  // Fallback to cache
+  const cachedResponse = await cache.match(request);
+  if (cachedResponse) {
+    console.log("[SW] Serving shell asset from cache:", request.url);
+    return cachedResponse;
+  }
+  
+  // Final fallback for navigation requests
+  if (request.destination === "document") {
+    const indexResponse = await cache.match("/index.html");
+    if (indexResponse) {
+      return indexResponse;
+    }
+  }
+  
+  // If all fails, throw error
+  throw new Error(`No cache or network response available for ${request.url}`);
 }
 
 // Network-first strategy for API requests
