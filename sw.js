@@ -1,20 +1,20 @@
-// sw.js - Enhanced Service Worker with versioned caches and offline-first strategy
-const CACHE_VERSION = '2025-08-31-1'; // Increment this on each deploy
+// Service Worker with versioned caches and offline-first strategy
+const CACHE_VERSION = '2025-08-31-1'; // Update this on each deploy
 const CACHE_NAME = `capsera-cache-v${CACHE_VERSION}`;
 
 const urlsToCache = [
   "/",
   "/index.html",
-  "/app.js",
   "/styles.css",
   "/manifest.json",
+  "/app.js",
   "/src/db.js",
   "/src/supabase.js",
   "/src/validation.js",
   "/src/translate.js",
 ];
 
-// Install event - cache app shell
+// Install event - cache resources and take control immediately
 self.addEventListener("install", (event) => {
   console.log(`SW installing with cache version: ${CACHE_VERSION}`);
   
@@ -30,7 +30,7 @@ self.addEventListener("install", (event) => {
       })
   );
   
-  // Take control immediately
+  // Skip waiting to take control immediately
   self.skipWaiting();
 });
 
@@ -44,7 +44,7 @@ self.addEventListener("activate", (event) => {
       caches.keys().then((cacheNames) => {
         return Promise.all(
           cacheNames.map((cacheName) => {
-            if (cacheName !== CACHE_NAME && cacheName.startsWith('capsera-cache-')) {
+            if (cacheName !== CACHE_NAME && cacheName.startsWith('capsera-cache-v')) {
               console.log("Deleting old cache:", cacheName);
               return caches.delete(cacheName);
             }
@@ -55,8 +55,8 @@ self.addEventListener("activate", (event) => {
       self.clients.claim()
     ])
   );
-
-  // Notify clients about new version
+  
+  // Notify clients that a new version is available
   self.clients.matchAll().then(clients => {
     clients.forEach(client => {
       client.postMessage({
@@ -67,38 +67,29 @@ self.addEventListener("activate", (event) => {
   });
 });
 
-// Fetch event - implement different strategies based on request type
+// Fetch event - implement different strategies for different request types
 self.addEventListener("fetch", (event) => {
   const request = event.request;
   const url = new URL(request.url);
-
+  
   // Skip caching for API calls and external resources
   if (
-    url.pathname.includes("/api/") ||
-    url.hostname.includes("supabase.") ||
-    url.hostname.includes("openai.") ||
-    url.hostname.includes("translate.googleapis.") ||
-    request.method !== 'GET'
+    request.url.includes("/api/") ||
+    request.url.includes("supabase.") ||
+    request.url.includes("openai.") ||
+    request.url.includes("translate.googleapis.") ||
+    url.protocol !== "https:" && url.protocol !== "http:"
   ) {
     return;
   }
 
-  // Special handling for manifest.json - always fetch fresh for version checks
-  if (url.pathname === '/manifest.json') {
-    event.respondWith(
-      fetch(request, { cache: 'no-store' })
-        .catch(() => caches.match(request))
-    );
-    return;
-  }
-
-  // Navigation requests - network-first strategy
+  // Handle navigation requests (HTML pages) - Network first
   if (request.mode === 'navigate' || request.destination === 'document') {
     event.respondWith(
       fetch(request)
         .then(response => {
-          // Cache the fresh HTML response
-          if (response.ok) {
+          // If network succeeds, update cache and return response
+          if (response && response.status === 200) {
             const responseClone = response.clone();
             caches.open(CACHE_NAME).then(cache => {
               cache.put(request, responseClone);
@@ -107,56 +98,74 @@ self.addEventListener("fetch", (event) => {
           return response;
         })
         .catch(() => {
-          // Fallback to cached version when offline
-          return caches.match(request)
-            .then(response => response || caches.match('/index.html'));
+          // Network failed, try cache
+          return caches.match(request).then(response => {
+            return response || caches.match('/index.html');
+          });
         })
     );
     return;
   }
 
-  // Static assets - cache-first with stale-while-revalidate
+  // Handle manifest.json with no-cache for version checking
+  if (request.url.includes('/manifest.json')) {
+    event.respondWith(
+      fetch(request, { cache: 'no-store' })
+        .catch(() => caches.match(request))
+    );
+    return;
+  }
+
+  // Handle static assets - Cache first with stale-while-revalidate
   event.respondWith(
     caches.match(request)
-      .then(response => {
-        if (response) {
-          // Return cached version immediately
-          // Update cache in background (stale-while-revalidate)
+      .then((cachedResponse) => {
+        // If we have a cached response, return it immediately
+        if (cachedResponse) {
+          // Stale-while-revalidate: update cache in background
           fetch(request)
-            .then(fetchResponse => {
-              if (fetchResponse.ok) {
+            .then(response => {
+              if (response && response.status === 200) {
                 caches.open(CACHE_NAME).then(cache => {
-                  cache.put(request, fetchResponse);
+                  cache.put(request, response.clone());
                 });
               }
             })
             .catch(() => {
-              // Ignore fetch errors for background updates
+              // Network failed, but we already have cached version
             });
           
-          return response;
+          return cachedResponse;
         }
-
-        // Not in cache, fetch from network
+        
+        // No cached response, fetch from network
         return fetch(request)
-          .then(fetchResponse => {
-            if (fetchResponse.ok) {
-              const responseClone = fetchResponse.clone();
+          .then(response => {
+            // Cache successful responses
+            if (response && response.status === 200) {
+              const responseClone = response.clone();
               caches.open(CACHE_NAME).then(cache => {
                 cache.put(request, responseClone);
               });
             }
-            return fetchResponse;
+            return response;
+          })
+          .catch(() => {
+            // Network failed and no cache - return offline fallback for documents
+            if (request.destination === "document") {
+              return caches.match("/index.html");
+            }
+            throw new Error('Network failed and no cached version available');
           });
       })
   );
 });
 
-// Handle sync event for background sync
+// Handle background sync for offline data
 self.addEventListener('sync', (event) => {
-  if (event.tag === 'background-sync') {
+  if (event.tag === 'sync-offline-data') {
     event.waitUntil(
-      // Notify clients to sync offline data
+      // Notify clients to sync their offline data
       self.clients.matchAll().then(clients => {
         clients.forEach(client => {
           client.postMessage({ type: 'SYNC_OFFLINE_DATA' });
@@ -164,4 +173,20 @@ self.addEventListener('sync', (event) => {
       })
     );
   }
+});
+
+// Handle push notifications (future feature)
+self.addEventListener('push', (event) => {
+  console.log('Push notification received');
+  // TODO: Implement push notification handling
+});
+
+// Cleanup on error
+self.addEventListener('error', (event) => {
+  console.error('SW error:', event.error);
+});
+
+// Cleanup on unhandled promise rejection
+self.addEventListener('unhandledrejection', (event) => {
+  console.error('SW unhandled rejection:', event.reason);
 });
