@@ -1,5 +1,6 @@
 // netlify/functions/translate.js
-// Enhanced serverless function to handle Google Translate API calls securely
+// Serverless function to handle Google Translate API calls securely
+
 exports.handler = async (event, context) => {
   // Only allow POST requests
   if (event.httpMethod !== 'POST') {
@@ -40,8 +41,8 @@ exports.handler = async (event, context) => {
         },
         body: JSON.stringify({ 
           success: false,
-          error: 'API key not configured - translations disabled',
-          translatedText: null // Client will use original text as fallback
+          error: 'API key not configured',
+          translatedText: null // Client will use original text
         })
       };
     }
@@ -55,26 +56,7 @@ exports.handler = async (event, context) => {
           'Access-Control-Allow-Origin': '*',
           'Content-Type': 'application/json'
         },
-        body: JSON.stringify({ 
-          success: false,
-          error: 'Missing required fields: text and targetLang' 
-        })
-      };
-    }
-
-    // Validate target language (support Indian languages)
-    const supportedLangs = ['hi', 'bn', 'te', 'mr', 'ta', 'gu', 'ur', 'ml', 'en'];
-    if (!supportedLangs.includes(targetLang)) {
-      return {
-        statusCode: 400,
-        headers: {
-          'Access-Control-Allow-Origin': '*',
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({ 
-          success: false,
-          error: `Unsupported target language: ${targetLang}. Supported: ${supportedLangs.join(', ')}` 
-        })
+        body: JSON.stringify({ error: 'Missing text or targetLang' })
       };
     }
 
@@ -88,33 +70,13 @@ exports.handler = async (event, context) => {
         },
         body: JSON.stringify({ 
           success: true,
-          translatedText: text, // Return original for non-translatable content
-          skipped: true,
-          reason: 'Non-translatable content'
+          translatedText: text // Return original for non-translatable content
         })
       };
     }
-
-    // Return original text if source and target are the same
-    if (sourceLang === targetLang) {
-      return {
-        statusCode: 200,
-        headers: {
-          'Access-Control-Allow-Origin': '*',
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({ 
-          success: true,
-          translatedText: text,
-          skipped: true,
-          reason: 'Same source and target language'
-        })
-      };
-    }
-
-    console.log(`Translating "${text.substring(0, 50)}..." from ${sourceLang} to ${targetLang}`);
 
     const url = `https://translation.googleapis.com/language/translate/v2?key=${GOOGLE_TRANSLATE_KEY}`;
+
     const response = await fetch(url, {
       method: 'POST',
       headers: {
@@ -129,53 +91,19 @@ exports.handler = async (event, context) => {
     });
 
     if (!response.ok) {
-      const errorText = await response.text();
-      console.error(`Google Translate API error: ${response.status} - ${errorText}`);
-      
       throw new Error(`Translation API error: ${response.status} - ${response.statusText}`);
     }
 
     const data = await response.json();
-    
-    if (!data.data || !data.data.translations || !data.data.translations[0]) {
-      throw new Error('Invalid response format from Google Translate API');
-    }
-
     const translatedText = data.data.translations[0].translatedText;
-    
-    // Decode HTML entities that Google Translate might return
+
+    // Decode HTML entities that might be returned
     const decodedText = translatedText
       .replace(/&amp;/g, '&')
       .replace(/&lt;/g, '<')
       .replace(/&gt;/g, '>')
       .replace(/&quot;/g, '"')
-      .replace(/&#39;/g, "'")
-      .replace(/&#x27;/g, "'")
-      .replace(/&#x2F;/g, '/')
-      .replace(/&nbsp;/g, ' ');
-
-    // Basic validation of translation quality
-    const isValidTranslation = decodedText.trim().length > 0 && 
-                              decodedText !== text &&
-                              !/^[\s\-_:/.]*$/.test(decodedText);
-
-    if (!isValidTranslation) {
-      console.warn(`Poor translation quality for "${text}" -> "${decodedText}"`);
-      return {
-        statusCode: 200,
-        headers: {
-          'Access-Control-Allow-Origin': '*',
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          success: true,
-          translatedText: text, // Fallback to original
-          warning: 'Translation quality was poor, returned original text'
-        })
-      };
-    }
-
-    console.log(`Translation successful: "${text.substring(0, 30)}..." -> "${decodedText.substring(0, 30)}..."`);
+      .replace(/&#39;/g, "'");
 
     return {
       statusCode: 200,
@@ -185,18 +113,15 @@ exports.handler = async (event, context) => {
       },
       body: JSON.stringify({
         success: true,
-        translatedText: decodedText,
-        originalText: text,
-        detectedSourceLanguage: data.data.translations[0].detectedSourceLanguage || sourceLang
+        translatedText: decodedText
       })
     };
 
   } catch (error) {
     console.error('Translation function error:', error);
     
-    // Return graceful fallback instead of hard error
     return {
-      statusCode: 200,
+      statusCode: 200, // Return 200 with error flag for graceful fallback
       headers: {
         'Access-Control-Allow-Origin': '*',
         'Content-Type': 'application/json'
@@ -204,8 +129,7 @@ exports.handler = async (event, context) => {
       body: JSON.stringify({
         success: false,
         error: error.message,
-        translatedText: null, // Client will use original text as fallback
-        fallbackReason: 'Translation service temporarily unavailable'
+        translatedText: null // Client will use original text
       })
     };
   }
