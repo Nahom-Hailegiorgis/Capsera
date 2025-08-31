@@ -1,6 +1,6 @@
 export const dbHelper = {
   dbName: "CapseraDB",
-  version: 4, // Incremented version for new schema
+  version: 3,
   db: null,
 
   async init() {
@@ -19,7 +19,6 @@ export const dbHelper = {
         if (!db.objectStoreNames.contains("feedback_local")) {
           const feedbackStore = db.createObjectStore("feedback_local", {
             keyPath: "id",
-            autoIncrement: true, // FIXED: Added autoIncrement for feedback store
           });
           feedbackStore.createIndex("status", "status", { unique: false });
           feedbackStore.createIndex("submitted_at", "submitted_at", {
@@ -29,33 +28,13 @@ export const dbHelper = {
             unique: false,
           });
         }
-
-        // Enhanced users store with UUID tracking
         if (!db.objectStoreNames.contains("users")) {
           const userStore = db.createObjectStore("users", {
-            keyPath: "id",
-            autoIncrement: true,
+            keyPath: "full_name",
           });
-          userStore.createIndex("full_name", "full_name", { unique: false });
           userStore.createIndex("pin_hash", "pin_hash", { unique: false });
-          userStore.createIndex("device_id", "device_id", { unique: false });
-          userStore.createIndex("user_uuid", "user_uuid", { unique: true });
-          userStore.createIndex("full_name_device", ["full_name", "device_id"], { unique: true });
-        } else {
-          // Upgrade existing users store
-          const userStore = event.target.transaction.objectStore("users");
-          if (!userStore.indexNames.contains("user_uuid")) {
-            userStore.createIndex("user_uuid", "user_uuid", { unique: true });
-          }
-          if (!userStore.indexNames.contains("device_id")) {
-            userStore.createIndex("device_id", "device_id", { unique: false });
-          }
-          if (!userStore.indexNames.contains("full_name_device")) {
-            userStore.createIndex("full_name_device", ["full_name", "device_id"], { unique: true });
-          }
         }
 
-        // Enhanced drafts store with iteration tracking
         if (!db.objectStoreNames.contains("drafts")) {
           const draftStore = db.createObjectStore("drafts", {
             keyPath: "id",
@@ -71,12 +50,6 @@ export const dbHelper = {
             { unique: false }
           );
           draftStore.createIndex("version", "version", { unique: false });
-          // New iteration tracking indexes
-          draftStore.createIndex("draft_number", "draft_number", { unique: false });
-          draftStore.createIndex("user_uuid", "user_uuid", { unique: false });
-          draftStore.createIndex("last_submission_at", "last_submission_at", { unique: false });
-          // ADDED: user_id index for proper linking
-          draftStore.createIndex("user_id", "user_id", { unique: false });
         } else {
           const draftStore = event.target.transaction.objectStore("drafts");
           if (!draftStore.indexNames.contains("project_name")) {
@@ -90,20 +63,6 @@ export const dbHelper = {
               ["full_name", "project_name"],
               { unique: false }
             );
-          }
-          // Add new indexes for iteration tracking
-          if (!draftStore.indexNames.contains("draft_number")) {
-            draftStore.createIndex("draft_number", "draft_number", { unique: false });
-          }
-          if (!draftStore.indexNames.contains("user_uuid")) {
-            draftStore.createIndex("user_uuid", "user_uuid", { unique: false });
-          }
-          if (!draftStore.indexNames.contains("last_submission_at")) {
-            draftStore.createIndex("last_submission_at", "last_submission_at", { unique: false });
-          }
-          // ADDED: user_id index for proper linking
-          if (!draftStore.indexNames.contains("user_id")) {
-            draftStore.createIndex("user_id", "user_id", { unique: false });
           }
         }
 
@@ -155,80 +114,35 @@ export const dbHelper = {
     return hash.toString();
   },
 
-  // Enhanced saveUser with UUID tracking and orphan prevention
-  async saveUser(fullName, pinHash, userUuid = null) {
+  async saveUser(fullName, pinHash) {
     const db = await this.getDB();
     const transaction = db.transaction(["users"], "readwrite");
     const store = transaction.objectStore("users");
-    const deviceId = this.getDeviceId();
 
-    // Check if user with same name/device already exists (prevent resurrection of deleted users)
-    const existingUserRequest = store.index("full_name_device").get([fullName, deviceId]);
-    
+    const user = {
+      full_name: fullName,
+      pin_hash: pinHash,
+      created_at: new Date().toISOString(),
+    };
+
     return new Promise((resolve, reject) => {
-      existingUserRequest.onsuccess = () => {
-        const existingUser = existingUserRequest.result;
-        
-        if (existingUser && existingUser.deleted_at) {
-          // User was previously deleted, reject creation
-          reject(new Error(`User "${fullName}" was previously deleted. Please choose a different name.`));
-          return;
-        }
-
-        const user = {
-          full_name: fullName,
-          device_id: deviceId,
-          pin_hash: pinHash,
-          user_uuid: userUuid, // Store Supabase UUID for linking
-          created_at: new Date().toISOString(),
-          deleted_at: null,
-        };
-
-        const request = existingUser 
-          ? store.put({ ...existingUser, ...user, id: existingUser.id })
-          : store.add(user);
-          
-        request.onsuccess = () => {
-          const userId = request.result || existingUser.id;
-          resolve({ ...user, id: userId });
-        };
-        request.onerror = () => reject(request.error);
-      };
-      existingUserRequest.onerror = () => reject(existingUserRequest.error);
+      const request = store.put(user);
+      request.onsuccess = () => resolve(user);
+      request.onerror = () => reject(request.error);
     });
   },
 
   // Add these methods to your db.js dbHelper object
 
-  // FIXED: Save feedback locally (for offline support) with proper validation and key generation
+  // Save feedback locally (for offline support)
   async saveFeedback(feedbackData) {
     const db = await this.getDB();
     const transaction = db.transaction(["feedback_local"], "readwrite");
     const store = transaction.objectStore("feedback_local");
 
-    // FIXED: Validate and sanitize data before saving to prevent keyPath issues
-    const sanitizedData = {
-      device_id: feedbackData.device_id || this.getDeviceId(),
-      message: feedbackData.message || "",
-      contact_info: feedbackData.contact_info || null,
-      anonymous: feedbackData.anonymous !== undefined ? feedbackData.anonymous : true,
-      status: "pending_sync", // Default status for feedback
-      submitted_at: new Date().toISOString(),
-      // Note: 'id' field will be auto-generated by IndexedDB due to autoIncrement
-    };
-
-    // Additional validation to ensure required fields exist
-    if (!sanitizedData.message.trim()) {
-      throw new Error("Feedback message is required");
-    }
-
     return new Promise((resolve, reject) => {
-      const request = store.add(sanitizedData);
-      request.onsuccess = () => {
-        // Return the data with the generated ID
-        const result = { ...sanitizedData, id: request.result };
-        resolve(result);
-      };
+      const request = store.add(feedbackData);
+      request.onsuccess = () => resolve(feedbackData);
       request.onerror = () => reject(request.error);
     });
   },
@@ -337,16 +251,8 @@ export const dbHelper = {
     const store = transaction.objectStore("users");
 
     return new Promise((resolve, reject) => {
-      const request = store.index("full_name_device").get([fullName, this.getDeviceId()]);
-      request.onsuccess = () => {
-        const user = request.result;
-        // Don't return deleted users
-        if (user && user.deleted_at) {
-          resolve(null);
-        } else {
-          resolve(user);
-        }
-      };
+      const request = store.get(fullName);
+      request.onsuccess = () => resolve(request.result);
       request.onerror = () => reject(request.error);
     });
   },
@@ -355,126 +261,45 @@ export const dbHelper = {
     const db = await this.getDB();
     const transaction = db.transaction(["users"], "readonly");
     const store = transaction.objectStore("users");
-    const deviceId = this.getDeviceId();
 
     return new Promise((resolve, reject) => {
-      const request = store.index("device_id").getAll(deviceId);
-      request.onsuccess = () => {
-        const users = (request.result || []).filter(user => !user.deleted_at);
-        resolve(users);
-      };
+      const request = store.getAll();
+      request.onsuccess = () => resolve(request.result || []);
       request.onerror = () => reject(request.error);
     });
   },
 
-  // Enhanced deleteUser with proper orphan cleanup
   async deleteUser(fullName) {
     const db = await this.getDB();
-    const deviceId = this.getDeviceId();
-    
-    // Start transaction for both users and drafts
-    const transaction = db.transaction(["users", "drafts"], "readwrite");
-    const userStore = transaction.objectStore("users");
-    const draftStore = transaction.objectStore("drafts");
+    const transaction = db.transaction(["users"], "readwrite");
+    const store = transaction.objectStore("users");
 
     return new Promise((resolve, reject) => {
-      // Get user first
-      const getUserRequest = userStore.index("full_name_device").get([fullName, deviceId]);
-      
-      getUserRequest.onsuccess = async () => {
-        const user = getUserRequest.result;
-        if (!user) {
-          resolve(false);
-          return;
-        }
-
-        try {
-          // Soft delete user (mark as deleted instead of hard delete)
-          user.deleted_at = new Date().toISOString();
-          const updateUserRequest = userStore.put(user);
-          
-          updateUserRequest.onsuccess = async () => {
-            // Delete all drafts belonging to this user
-            const draftsRequest = draftStore.index("user_project").getAll([fullName, "*"]);
-            
-            draftsRequest.onsuccess = () => {
-              const drafts = draftsRequest.result || [];
-              const deletePromises = drafts.map(draft => 
-                new Promise((resolveDraft, rejectDraft) => {
-                  const deleteDraftRequest = draftStore.delete(draft.id);
-                  deleteDraftRequest.onsuccess = () => resolveDraft();
-                  deleteDraftRequest.onerror = () => rejectDraft(deleteDraftRequest.error);
-                })
-              );
-              
-              Promise.all(deletePromises)
-                .then(() => {
-                  console.log(`User "${fullName}" soft deleted. ${drafts.length} drafts removed.`);
-                  resolve(true);
-                })
-                .catch(reject);
-            };
-            draftsRequest.onerror = () => reject(draftsRequest.error);
-          };
-          updateUserRequest.onerror = () => reject(updateUserRequest.error);
-        } catch (error) {
-          reject(error);
-        }
-      };
-      getUserRequest.onerror = () => reject(getUserRequest.error);
+      const request = store.delete(fullName);
+      request.onsuccess = () => resolve(true);
+      request.onerror = () => reject(request.error);
     });
   },
 
-  // FIXED: Enhanced saveDraft with proper transaction handling to prevent TransactionInactiveError
   async saveDraft(submission) {
     const db = await this.getDB();
-    
+    const transaction = db.transaction(["drafts"], "readwrite");
+    const store = transaction.objectStore("drafts");
+
     if (!submission.project_name) {
       submission.project_name = "Default Project";
     }
 
-    // Get previous drafts to determine iteration info - do this BEFORE starting the write transaction
-    const previousDrafts = await this.getDraftsByUserAndProject(
-      submission.full_name, 
-      submission.project_name
-    );
-
-    const lastDraft = previousDrafts.sort((a, b) => 
-      new Date(b.saved_at || b.created_at) - new Date(a.saved_at || a.created_at)
-    )[0];
-
-    // Prepare the draft object with all required fields
     const draft = {
       ...submission,
-      draft_number: lastDraft ? (lastDraft.draft_number || 1) + 1 : 1,
-      previous_score: lastDraft?.quality_score || null,
-      last_submission_at: new Date().toISOString(),
-      first_draft_submitted_at: lastDraft?.first_draft_submitted_at || new Date().toISOString(),
       saved_at: new Date().toISOString(),
       synced: false,
-      user_uuid: submission.user_uuid || null,
-      user_id: submission.user_id || null,
-      // Note: 'id' will be auto-generated due to autoIncrement
     };
 
-    // FIXED: Start a NEW transaction AFTER all async operations are complete
-    // This prevents the TransactionInactiveError by ensuring the transaction is active when add() is called
     return new Promise((resolve, reject) => {
-      const transaction = db.transaction(["drafts"], "readwrite");
-      const store = transaction.objectStore("drafts");
-
-      // Add the draft synchronously within the transaction scope
       const request = store.add(draft);
-      
-      request.onsuccess = () => {
-        const result = { ...draft, id: request.result };
-        resolve(result);
-      };
-      
+      request.onsuccess = () => resolve({ ...draft, id: request.result });
       request.onerror = () => reject(request.error);
-      
-      // Handle transaction errors
-      transaction.onerror = () => reject(transaction.error);
     });
   },
 
@@ -528,52 +353,10 @@ export const dbHelper = {
     });
   },
 
-  // Enhanced deleteDraftsByUserAndProject with user validation
   async deleteDraftsByUserAndProject(fullName, projectName) {
-    // Verify user still exists and is not deleted
-    const user = await this.getUser(fullName);
-    if (!user) {
-      console.warn(`Cannot delete drafts for non-existent user: ${fullName}`);
-      return [];
-    }
-
     const drafts = await this.getDraftsByUserAndProject(fullName, projectName);
     const deletePromises = drafts.map((draft) => this.deleteDraft(draft.id));
     return Promise.all(deletePromises);
-  },
-
-  // New method: Get iteration info for cooldown enforcement
-  async getDraftIterationInfo(fullName, projectName) {
-    const drafts = await this.getDraftsByUserAndProject(fullName, projectName);
-    if (drafts.length === 0) {
-      return {
-        draft_number: 1,
-        last_submission_at: null,
-        first_draft_submitted_at: null,
-        previous_score: null,
-        can_submit_next: true,
-        cooldown_remaining: 0
-      };
-    }
-
-    const latestDraft = drafts.sort((a, b) => 
-      new Date(b.last_submission_at || b.saved_at) - new Date(a.last_submission_at || a.saved_at)
-    )[0];
-
-    const lastSubmissionTime = new Date(latestDraft.last_submission_at || latestDraft.saved_at);
-    const cooldownPeriod = 24 * 60 * 60 * 1000; // 24 hours in milliseconds
-    const timeSinceLastSubmission = Date.now() - lastSubmissionTime.getTime();
-    const canSubmitNext = timeSinceLastSubmission >= cooldownPeriod;
-    const cooldownRemaining = Math.max(0, cooldownPeriod - timeSinceLastSubmission);
-
-    return {
-      draft_number: (latestDraft.draft_number || 1) + 1,
-      last_submission_at: latestDraft.last_submission_at,
-      first_draft_submitted_at: latestDraft.first_draft_submitted_at || latestDraft.saved_at,
-      previous_score: latestDraft.quality_score || null,
-      can_submit_next: canSubmitNext,
-      cooldown_remaining: cooldownRemaining
-    };
   },
 
   async cacheIdeas(ideas) {
