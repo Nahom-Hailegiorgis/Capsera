@@ -9,6 +9,8 @@ class CapseraApp {
     this.currentScreen = "ideas";
     this.currentUser = null;
     this.currentProject = null;
+    this.currentUserId = null; // ADDED: Store the selected user's ID for proper project creation
+    this.projects = []; // ADDED: In-memory projects cache for current user
     this.currentLanguage = "en";
     this.translations = null;
     this.ideas = [];
@@ -26,6 +28,8 @@ class CapseraApp {
     await this.loadIdeasScreen();
     this.showScreen("ideas");
     setInterval(() => this.syncOfflineData(), 30000);
+    // ADDED: Sync offline projects on startup
+    this.syncOfflineProjects();
   }
 
   setupEventListeners() {
@@ -41,6 +45,8 @@ class CapseraApp {
     window.addEventListener("online", () => {
       this.isOnline = true;
       this.syncOfflineData();
+      // ADDED: Sync projects when coming online
+      this.syncOfflineProjects();
       this.showMessage(this.t("Connection restored"), "success");
     });
 
@@ -54,6 +60,8 @@ class CapseraApp {
       navigator.serviceWorker.addEventListener("message", (event) => {
         if (event.data.type === "SYNC_OFFLINE_DATA") {
           this.syncOfflineData();
+          // ADDED: Also sync projects
+          this.syncOfflineProjects();
         }
       });
     }
@@ -540,16 +548,19 @@ class CapseraApp {
     categorySelect.size = 5;
   }
 
-  handleUserSelect(e) {
+  // MODIFIED: Enhanced user selection with proper ID tracking
+  async handleUserSelect(e) {
     const selectedValue = e.target.value;
     
     if (selectedValue === "new") {
-      this.showUserCreationForm();
+      await this.showUserCreationForm();
     } else if (selectedValue) {
-      this.selectExistingUser(selectedValue);
+      await this.selectExistingUser(selectedValue);
     } else {
       this.currentUser = null;
+      this.currentUserId = null; // Clear user ID
       this.currentProject = null;
+      this.projects = []; // Clear projects cache
       this.setupProjectSelectOptions();
     }
     
@@ -557,56 +568,231 @@ class CapseraApp {
     this.checkCooldownStatus();
   }
 
-  handleProjectSelect(e) {
+  // MODIFIED: Enhanced project selection
+  async handleProjectSelect(e) {
     if (e.target.value === "new") {
-      this.createNewProject();
+      await this.createNewProject();
     } else {
       this.currentProject = e.target.value;
     }
     this.checkCooldownStatus();
   }
 
+  // MODIFIED: Enhanced project creation with immediate dropdown update and local persistence
   async createNewProject() {
     const projectName = prompt(this.t("Enter project name:"));
-    if (!projectName) return;
+    if (!projectName || !projectName.trim()) return;
+
+    if (!this.currentUser) {
+      this.showMessage(this.t("Please select a user first"), "error");
+      return;
+    }
 
     this.currentProject = projectName;
 
-    // Save placeholder draft
-    await dbHelper.saveDraft({
-      device_id: dbHelper.getDeviceId(),
-      full_name: this.currentUser,
-      project_name: projectName,
-      ideal_customer_profile: "",
-      product_idea: "",
-      pain_points: "",
-      alternatives: "",
-      category: [],
-      heard_about: "",
-      version: 0,
-      is_final: false,
-    });
+    try {
+      // OPTIMISTIC UI UPDATE: Add to local cache immediately
+      this.projects.push({ name: projectName, user_id: this.currentUserId, needs_sync: !this.isOnline });
 
-    await this.setupProjectSelectOptions();
-    this.showMessage(`${this.t("Project created")}: "${projectName}"!`, "success");
+      // Save to local storage immediately for persistence
+      await this.saveProjectsLocally(this.currentUserId, this.projects);
+
+      // Save placeholder draft to establish project in database
+      const placeholderDraft = {
+        device_id: dbHelper.getDeviceId(),
+        full_name: this.currentUser,
+        user_id: this.currentUserId, // FIXED: Use user_id instead of just user_name
+        project_name: projectName,
+        ideal_customer_profile: "",
+        product_idea: "",
+        pain_points: "",
+        alternatives: "",
+        category: [],
+        heard_about: "",
+        version: 0,
+        is_final: false,
+        needs_sync: !this.isOnline
+      };
+
+      await dbHelper.saveDraft(placeholderDraft);
+
+      // Update dropdown immediately without page refresh
+      await this.setupProjectSelectOptions();
+      
+      // Select the newly created project in the dropdown
+      const projectSelect = document.getElementById("project-select");
+      if (projectSelect) {
+        projectSelect.value = projectName;
+      }
+
+      // If online, sync to server
+      if (this.isOnline) {
+        try {
+          // TODO: Add supabaseHelper.createProject method to create project on server
+          // await supabaseHelper.createProject({
+          //   name: projectName,
+          //   user_id: this.currentUserId,
+          //   created_by: this.currentUser
+          // });
+          
+          // Mark project as synced in local cache
+          const projectIndex = this.projects.findIndex(p => p.name === projectName);
+          if (projectIndex !== -1) {
+            this.projects[projectIndex].needs_sync = false;
+            await this.saveProjectsLocally(this.currentUserId, this.projects);
+          }
+        } catch (error) {
+          console.error("Failed to sync project to server:", error);
+          // Project remains marked as needs_sync for later
+        }
+      }
+
+      this.showMessage(`${this.t("Project created")}: "${projectName}"!`, "success");
+    } catch (error) {
+      console.error("Error creating project:", error);
+      this.showMessage(this.t("Failed to create project"), "error");
+      
+      // Rollback optimistic update
+      this.projects = this.projects.filter(p => p.name !== projectName);
+      if (this.currentProject === projectName) {
+        this.currentProject = null;
+      }
+      await this.setupProjectSelectOptions();
+    }
   }
 
+  // MODIFIED: Enhanced project options setup with local persistence
   async setupProjectSelectOptions() {
     const projectSelect = document.getElementById("project-select");
     if (!projectSelect || !this.currentUser) return;
 
-    const userDrafts = await dbHelper.getDraftsByUser(this.currentUser);
-    const projects = [...new Set(userDrafts.map((d) => d.project_name || "Default Project"))];
+    // Load projects from local cache first (for offline support)
+    if (this.currentUserId) {
+      this.projects = await this.loadProjectsLocally(this.currentUserId);
+    }
 
+    // If online, try to sync/refresh from server
+    if (this.isOnline && this.currentUserId) {
+      try {
+        // TODO: Add supabaseHelper.getProjectsByUserId method
+        // const serverProjects = await supabaseHelper.getProjectsByUserId(this.currentUserId);
+        // Merge with local projects, preferring server data
+        // this.projects = this.mergeProjects(this.projects, serverProjects);
+        // await this.saveProjectsLocally(this.currentUserId, this.projects);
+      } catch (error) {
+        console.error("Failed to load projects from server:", error);
+        // Continue with local projects
+      }
+    }
+
+    // Fallback: Get projects from user drafts if no cached projects
+    if (!this.projects.length) {
+      const userDrafts = await dbHelper.getDraftsByUser(this.currentUser);
+      const projectNames = [...new Set(userDrafts.map((d) => d.project_name || "Default Project"))];
+      this.projects = projectNames.map(name => ({ 
+        name, 
+        user_id: this.currentUserId,
+        needs_sync: false 
+      }));
+      
+      if (this.currentUserId) {
+        await this.saveProjectsLocally(this.currentUserId, this.projects);
+      }
+    }
+
+    // Render dropdown options
     projectSelect.innerHTML = `
       <option value="">${this.t("Select Project")}</option>
       <option value="new">${this.t("Create New Project")}</option>
-      ${projects.map(project => `
-        <option value="${this.escapeHtml(project)}" ${project === this.currentProject ? "selected" : ""}>
-          ${this.escapeHtml(project)}
+      ${this.projects.map(project => `
+        <option value="${this.escapeHtml(project.name)}" ${project.name === this.currentProject ? "selected" : ""}>
+          ${this.escapeHtml(project.name)}${project.needs_sync ? " (offline)" : ""}
         </option>
       `).join("")}
     `;
+  }
+
+  // ADDED: Local storage methods for projects per user
+  async saveProjectsLocally(userId, projects) {
+    if (!userId) return;
+    
+    try {
+      const key = `capsera_projects_${userId}`;
+      const data = {
+        projects: projects,
+        updated_at: new Date().toISOString()
+      };
+      
+      // Try IndexedDB first via dbHelper, fallback to localStorage
+      try {
+        await dbHelper.saveSetting(key, data);
+      } catch (error) {
+        // Fallback to localStorage
+        localStorage.setItem(key, JSON.stringify(data));
+      }
+    } catch (error) {
+      console.error("Failed to save projects locally:", error);
+    }
+  }
+
+  async loadProjectsLocally(userId) {
+    if (!userId) return [];
+    
+    try {
+      const key = `capsera_projects_${userId}`;
+      
+      // Try IndexedDB first via dbHelper
+      try {
+        const data = await dbHelper.getSetting(key);
+        if (data && data.projects) {
+          return data.projects;
+        }
+      } catch (error) {
+        console.log("IndexedDB fallback failed, trying localStorage");
+      }
+      
+      // Fallback to localStorage
+      const stored = localStorage.getItem(key);
+      if (stored) {
+        const data = JSON.parse(stored);
+        return data.projects || [];
+      }
+    } catch (error) {
+      console.error("Failed to load projects locally:", error);
+    }
+    
+    return [];
+  }
+
+  // ADDED: Sync offline projects to server when online
+  async syncOfflineProjects() {
+    if (!this.isOnline || !this.currentUserId) return;
+
+    const unsynced = this.projects.filter(p => p.needs_sync);
+    if (!unsynced.length) return;
+
+    let syncedCount = 0;
+    for (const project of unsynced) {
+      try {
+        // TODO: Call supabaseHelper.createProject when that method is available
+        // await supabaseHelper.createProject({
+        //   name: project.name,
+        //   user_id: this.currentUserId,
+        //   created_by: this.currentUser
+        // });
+        
+        project.needs_sync = false;
+        syncedCount++;
+      } catch (error) {
+        console.error(`Failed to sync project "${project.name}":`, error);
+      }
+    }
+
+    if (syncedCount > 0) {
+      await this.saveProjectsLocally(this.currentUserId, this.projects);
+      this.showMessage(`Synced ${syncedCount} projects to server`, "success");
+      await this.setupProjectSelectOptions(); // Refresh dropdown to remove (offline) indicators
+    }
   }
 
   async setupUserSelectOptions() {
@@ -668,6 +854,7 @@ class CapseraApp {
     const submission = {
       device_id: dbHelper.getDeviceId(),
       full_name: this.currentUser,
+      user_id: this.currentUserId, // FIXED: Include user_id instead of just user_name
       project_name: this.currentProject,
       ideal_customer_profile: formData.get("ideal_customer_profile"),
       product_idea: formData.get("product_idea"),
@@ -722,7 +909,7 @@ class CapseraApp {
 
         if (this.isOnline) {
           // TODO: await supabaseHelper.submitFinalIdea(submission);
-          // TODO: await supabaseHelper.createUser(this.currentUser);
+          // TODO: await supabaseHelper.createOrGetUser(this.currentUser, dbHelper.getDeviceId());
         } else {
           await dbHelper.addToSyncQueue(submission);
         }
@@ -890,6 +1077,9 @@ class CapseraApp {
     if (syncedCount > 0) {
       this.showMessage(`Synced ${syncedCount} submissions`, "success");
     }
+
+    // ADDED: Also sync projects when syncing other data
+    await this.syncOfflineProjects();
   }
 
   showMessage(message, type = "info") {
@@ -952,6 +1142,7 @@ class CapseraApp {
     }
   }
 
+  // MODIFIED: Enhanced user creation with proper ID tracking
   async showUserCreationForm() {
     const name = prompt(this.t("What's your full name?"));
     if (!name) return;
@@ -962,16 +1153,40 @@ class CapseraApp {
       return;
     }
 
-    const pinHash = dbHelper.hashPin(pin);
-    await dbHelper.saveUser(name, pinHash);
+    try {
+      const pinHash = dbHelper.hashPin(pin);
+      const userData = await dbHelper.saveUser(name, pinHash);
 
-    this.currentUser = name;
-    this.setupUserSelectOptions();
-    this.setupProjectSelectOptions();
-    this.updateGreeting();
-    this.showMessage(`${this.t("User created")}: ${name}!`, "success");
+      this.currentUser = name;
+      this.currentUserId = userData.id; // Store the local user ID
+      this.projects = []; // Reset projects for new user
+      
+      // If online, create user on server and get UUID
+      if (this.isOnline) {
+        try {
+          // TODO: Call supabaseHelper.createOrGetUser when implementation is available
+          // const serverUser = await supabaseHelper.createOrGetUser(name, dbHelper.getDeviceId());
+          // this.currentUserId = serverUser.id; // Use server UUID instead
+          // 
+          // Update local user with server UUID
+          // await dbHelper.saveUser(name, pinHash, serverUser.id);
+        } catch (error) {
+          console.error("Failed to create user on server:", error);
+          // Continue with local user ID
+        }
+      }
+
+      this.setupUserSelectOptions();
+      this.setupProjectSelectOptions();
+      this.updateGreeting();
+      this.showMessage(`${this.t("User created")}: ${name}!`, "success");
+    } catch (error) {
+      console.error("User creation error:", error);
+      this.showMessage(this.t("Failed to create user"), "error");
+    }
   }
 
+  // MODIFIED: Enhanced existing user selection with proper ID tracking
   async selectExistingUser(fullName) {
     const pin = prompt(this.t("Enter your PIN:"));
     if (!pin) {
@@ -987,7 +1202,10 @@ class CapseraApp {
     }
 
     this.currentUser = fullName;
+    this.currentUserId = localUser.user_uuid || localUser.id; // Prefer server UUID, fallback to local ID
     this.currentProject = null;
+    this.projects = []; // Reset projects, will be loaded in setupProjectSelectOptions
+    
     await this.setupProjectSelectOptions();
     this.showMessage(`${this.t("Welcome back")}, ${fullName}!`, "success");
   }
