@@ -438,22 +438,77 @@ class CapseraApp {
     }
   }
 
-  renderSubmissionItem(draft, projectName) {
-    const statusText = draft.is_final ? this.t("Final Submission") : `${this.t("Draft")} v${draft.version}`;
-    const statusClass = draft.is_final ? "success" : "warning";
-    const aiScore = draft.ai_feedback?.overall_score || draft.ai_feedback?.score;
+// Replace the existing renderSubmissionItem method with this updated version:
+renderSubmissionItem(draft, projectName) {
+  const statusText = draft.is_final ? this.t("Final Submission") : `${this.t("Draft")} v${draft.version}`;
+  const statusClass = draft.is_final ? "success" : "warning";
+  const aiScore = draft.ai_feedback?.overall_score || draft.ai_feedback?.score;
 
-    return `
-      <div class="submission-item-compact">
-        <div class="submission-meta-compact">
-          <span class="status ${statusClass}">${statusText}</span>
-          <span class="submission-date">${new Date(draft.saved_at).toLocaleDateString()}</span>
-          ${aiScore ? `<span class="ai-score">AI: ${aiScore}/100</span>` : ""}
-        </div>
-        ${this.renderAIFeedback(draft.ai_feedback)}
+  return `
+    <div class="submission-item-compact">
+      <div class="submission-meta-compact">
+        <span class="status ${statusClass}">${statusText}</span>
+        <span class="submission-date">${new Date(draft.saved_at).toLocaleDateString()}</span>
+        ${aiScore ? `<span class="ai-score">AI: ${aiScore}/100</span>` : ""}
       </div>
-    `;
-  }
+      
+      <!-- Scrollable draft content frame -->
+      <div class="draft-content-frame">
+        <div class="draft-content-scroll">
+          <div class="draft-section">
+            <h5>${this.t("Customer Profile")}</h5>
+            <p>${this.escapeHtml(draft.ideal_customer_profile || "Not provided")}</p>
+          </div>
+          
+          <div class="draft-section">
+            <h5>${this.t("Product Idea")}</h5>
+            <p>${this.escapeHtml(draft.product_idea || "Not provided")}</p>
+          </div>
+          
+          <div class="draft-section">
+            <h5>${this.t("Pain Points")}</h5>
+            <p>${this.escapeHtml(draft.pain_points || "Not provided")}</p>
+          </div>
+          
+          <div class="draft-section">
+            <h5>${this.t("Alternatives")}</h5>
+            <p>${this.escapeHtml(draft.alternatives || "Not provided")}</p>
+          </div>
+          
+          ${draft.market_validation ? `
+            <div class="draft-section">
+              <h5>${this.t("Market Validation")}</h5>
+              <p>${this.escapeHtml(draft.market_validation)}</p>
+            </div>
+          ` : ""}
+          
+          ${draft.competitor_research ? `
+            <div class="draft-section">
+              <h5>${this.t("Competitor Research")}</h5>
+              <p>${this.escapeHtml(draft.competitor_research)}</p>
+            </div>
+          ` : ""}
+          
+          ${draft.investor_pitch ? `
+            <div class="draft-section">
+              <h5>${this.t("Investor Pitch")}</h5>
+              <p>${this.escapeHtml(draft.investor_pitch)}</p>
+            </div>
+          ` : ""}
+          
+          ${draft.mvp_link ? `
+            <div class="draft-section">
+              <h5>${this.t("MVP Link")}</h5>
+              <p><a href="${this.escapeHtml(draft.mvp_link)}" target="_blank">${this.escapeHtml(draft.mvp_link)}</a></p>
+            </div>
+          ` : ""}
+        </div>
+      </div>
+      
+      ${this.renderAIFeedback(draft.ai_feedback)}
+    </div>
+  `;
+}
 
   // Screen 3: Enhanced Submit Ideas with Dynamic Forms and Translation
   loadSubmitScreen() {
