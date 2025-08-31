@@ -1,4 +1,4 @@
-// app.js - Enhanced Capsera PWA with dynamic forms and comprehensive translation
+// Fixed version of app.js - Enhanced Capsera PWA with offline capabilities and version checking 
 import { dbHelper } from "./db.js";
 import { supabaseHelper } from "./supabase.js";
 import { validation } from "./validation.js";
@@ -9,14 +9,16 @@ class CapseraApp {
     this.currentScreen = "ideas";
     this.currentUser = null;
     this.currentProject = null;
-    this.currentUserId = null; // ADDED: Store the selected user's ID for proper project creation
-    this.projects = []; // ADDED: In-memory projects cache for current user
+    this.currentUserId = null;
+    this.projects = [];
     this.currentLanguage = "en";
     this.translations = null;
     this.ideas = [];
     this.isOnline = navigator.onLine;
     this.currentDraftNumber = 1;
-    this.expandedSubmissions = new Set(); // Track expanded submissions
+    this.expandedSubmissions = new Set();
+    this.offlineBanner = null;
+    this.lastKnownVersion = null;
 
     this.init();
   }
@@ -27,9 +29,16 @@ class CapseraApp {
     this.translations = await translator.init();
     await this.loadIdeasScreen();
     this.showScreen("ideas");
+    
+    // Check for app version updates
+    await this.checkForAppUpdates();
+    
+    // Set up periodic sync
     setInterval(() => this.syncOfflineData(), 30000);
-    // ADDED: Sync offline projects on startup
     this.syncOfflineProjects();
+    
+    // Initialize offline banner
+    this.updateOfflineStatus();
   }
 
   setupEventListeners() {
@@ -44,27 +53,245 @@ class CapseraApp {
     // Online/offline detection
     window.addEventListener("online", () => {
       this.isOnline = true;
+      this.updateOfflineStatus();
       this.syncOfflineData();
-      // ADDED: Sync projects when coming online
       this.syncOfflineProjects();
-      this.showMessage(this.t("Connection restored"), "success");
+      this.showMessage(this.t("Connection restored - syncing data..."), "success");
     });
 
     window.addEventListener("offline", () => {
       this.isOnline = false;
-      this.showMessage(this.t("Working offline"), "warning");
+      this.updateOfflineStatus();
+      this.showMessage(this.t("Working offline - drafts will be saved locally"), "warning");
     });
 
     // Service worker messages
     if ("serviceWorker" in navigator && navigator.serviceWorker) {
       navigator.serviceWorker.addEventListener("message", (event) => {
-        if (event.data.type === "SYNC_OFFLINE_DATA") {
-          this.syncOfflineData();
-          // ADDED: Also sync projects
-          this.syncOfflineProjects();
-        }
+        this.handleServiceWorkerMessage(event.data);
       });
     }
+
+    // Before unload - save current form data as draft
+    window.addEventListener("beforeunload", () => {
+      this.saveCurrentFormAsDraft();
+    });
+  }
+
+  // Handle service worker messages
+  handleServiceWorkerMessage(data) {
+    switch (data.type) {
+      case 'NEW_VERSION_AVAILABLE':
+        this.handleNewVersionAvailable(data.version);
+        break;
+      case 'SYNC_OFFLINE_DATA':
+        this.syncOfflineData();
+        this.syncOfflineProjects();
+        break;
+      default:
+        console.log('Unknown SW message:', data);
+    }
+  }
+
+  // Handle new version available
+  async handleNewVersionAvailable(newVersion) {
+    if (this.lastKnownVersion && this.lastKnownVersion !== newVersion) {
+      const shouldReload = confirm(
+        this.t("A new version of Capsera is available. Reload to update?")
+      );
+      
+      if (shouldReload) {
+        // Save current form data before reloading
+        await this.saveCurrentFormAsDraft();
+        window.location.reload();
+      }
+    }
+    this.lastKnownVersion = newVersion;
+  }
+
+  // Check for app updates by comparing manifest version
+  async checkForAppUpdates() {
+    try {
+      // Get current version from manifest
+      const response = await fetch('/manifest.json', { cache: 'no-store' });
+      const manifest = await response.json();
+      const currentVersion = manifest.version;
+      
+      // Get stored version
+      const storedVersion = await dbHelper.getSetting('app_version');
+      
+      if (storedVersion && storedVersion !== currentVersion) {
+        console.log(`App updated from ${storedVersion} to ${currentVersion}`);
+        this.showMessage(this.t("App updated to latest version!"), "success");
+      }
+      
+      // Store current version
+      await dbHelper.saveSetting('app_version', currentVersion);
+      this.lastKnownVersion = currentVersion;
+      
+    } catch (error) {
+      console.error('Version check failed:', error);
+    }
+  }
+
+  // Update offline status banner
+  updateOfflineStatus() {
+    if (!this.isOnline) {
+      this.showOfflineBanner();
+    } else {
+      this.hideOfflineBanner();
+    }
+  }
+
+  showOfflineBanner() {
+    if (this.offlineBanner) return;
+    
+    this.offlineBanner = document.createElement('div');
+    this.offlineBanner.className = 'offline-banner';
+    this.offlineBanner.innerHTML = `
+      <div class="offline-content">
+        📡 ${this.t("You are offline — drafts saved locally")}
+        <button onclick="app.hideOfflineBanner()" class="offline-dismiss">×</button>
+      </div>
+    `;
+    this.offlineBanner.style.cssText = `
+      position: fixed; top: 0; left: 0; right: 0; z-index: 1000;
+      background: #ffc107; color: #212529; padding: 10px;
+      text-align: center; font-weight: 500;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+      animation: slideDown 0.3s ease;
+    `;
+    
+    document.body.insertBefore(this.offlineBanner, document.body.firstChild);
+    
+    // Adjust content padding to account for banner
+    document.body.style.paddingTop = '50px';
+  }
+
+  hideOfflineBanner() {
+    if (this.offlineBanner) {
+      this.offlineBanner.remove();
+      this.offlineBanner = null;
+      document.body.style.paddingTop = '0';
+    }
+  }
+
+  // Save current form data as draft
+  async saveCurrentFormAsDraft() {
+    if (this.currentScreen !== 'submit' || !this.currentUser || !this.currentProject) {
+      return;
+    }
+
+    try {
+      const form = document.getElementById("submit-form");
+      if (!form) return;
+
+      const formData = new FormData(form);
+      const categorySelect = document.getElementById("category");
+      const selectedCategories = Array.from(categorySelect?.selectedOptions || []).map(option => option.value);
+
+      // Check if form has any meaningful content
+      const hasContent = formData.get("ideal_customer_profile") || 
+                        formData.get("product_idea") || 
+                        formData.get("pain_points") || 
+                        formData.get("alternatives");
+
+      if (!hasContent) return;
+
+      const draftData = {
+        device_id: dbHelper.getDeviceId(),
+        full_name: this.currentUser,
+        user_id: this.currentUserId,
+        project_name: this.currentProject,
+        ideal_customer_profile: formData.get("ideal_customer_profile") || "",
+        product_idea: formData.get("product_idea") || "",
+        pain_points: formData.get("pain_points") || "",
+        alternatives: formData.get("alternatives") || "",
+        category: selectedCategories,
+        heard_about: formData.get("heard_about") || "",
+        market_validation: formData.get("market_validation") || "",
+        competitor_research: formData.get("competitor_research") || "",
+        mvp_development: formData.get("mvp_development") || "",
+        investor_pitch: formData.get("investor_pitch") || "",
+        additional_research: formData.get("additional_research") || "",
+        mvp_link: formData.get("mvp_link") || "",
+        version: 0, // Version 0 indicates auto-saved draft
+        is_final: false,
+        needs_sync: !this.isOnline,
+        auto_saved: true,
+        saved_at: new Date().toISOString()
+      };
+
+      await dbHelper.saveDraft(draftData);
+      console.log('Auto-saved draft for', this.currentUser, this.currentProject);
+      
+    } catch (error) {
+      console.error('Failed to auto-save draft:', error);
+    }
+  }
+
+  // Restore auto-saved draft
+  async restoreAutoSavedDraft() {
+    if (!this.currentUser || !this.currentProject) return;
+
+    try {
+      const drafts = await dbHelper.getDraftsByUserAndProject(this.currentUser, this.currentProject);
+      const autoSaved = drafts.find(d => d.auto_saved && d.version === 0);
+      
+      if (!autoSaved) return;
+
+      const shouldRestore = confirm(
+        this.t("We found an auto-saved draft. Would you like to restore it?")
+      );
+      
+      if (!shouldRestore) {
+        // Delete the auto-saved draft if user doesn't want it
+        await dbHelper.deleteDraft(autoSaved.id);
+        return;
+      }
+
+      this.populateFormWithDraft(autoSaved);
+      this.showMessage(this.t("Draft restored successfully!"), "success");
+      
+      // Delete the auto-saved draft after restoring
+      await dbHelper.deleteDraft(autoSaved.id);
+      
+    } catch (error) {
+      console.error('Failed to restore auto-saved draft:', error);
+    }
+  }
+
+  // Populate form with draft data
+  populateFormWithDraft(draft) {
+    const form = document.getElementById("submit-form");
+    if (!form) return;
+
+    // Fill text inputs
+    const textFields = [
+      'ideal_customer_profile', 'product_idea', 'pain_points', 'alternatives',
+      'market_validation', 'competitor_research', 'mvp_development', 
+      'investor_pitch', 'additional_research', 'mvp_link', 'heard_about'
+    ];
+
+    textFields.forEach(fieldName => {
+      const field = document.getElementById(fieldName);
+      if (field && draft[fieldName]) {
+        field.value = draft[fieldName];
+        if (field.classList.contains('auto-expand')) {
+          this.autoExpandTextarea(field);
+        }
+      }
+    });
+
+    // Fill category selection
+    const categorySelect = document.getElementById("category");
+    if (categorySelect && draft.category) {
+      Array.from(categorySelect.options).forEach(option => {
+        option.selected = draft.category.includes(option.value);
+      });
+    }
+
+    this.updateWordCounts();
   }
 
   // Translation helper method
@@ -99,16 +326,24 @@ class CapseraApp {
         this.autoExpandTextarea(e.target);
       }
     });
+
+    // Auto-save form data while typing (debounced)
+    let autoSaveTimeout;
+    document.addEventListener("input", (e) => {
+      if (e.target.closest("#submit-form")) {
+        clearTimeout(autoSaveTimeout);
+        autoSaveTimeout = setTimeout(() => {
+          this.saveCurrentFormAsDraft();
+        }, 2000); // Auto-save after 2 seconds of inactivity
+      }
+    });
   }
 
   // Auto-expand textarea functionality
   autoExpandTextarea(textarea) {
-    // Reset height to auto to get the correct scrollHeight
     textarea.style.height = "auto";
-    // Set the height to match the content
     textarea.style.height = textarea.scrollHeight + "px";
     
-    // Minimum height constraint
     if (textarea.scrollHeight < 60) {
       textarea.style.height = "60px";
     }
@@ -119,6 +354,17 @@ class CapseraApp {
       try {
         const registration = await navigator.serviceWorker.register("/sw.js");
         console.log("SW registered:", registration);
+        
+        // Check for updates
+        registration.addEventListener('updatefound', () => {
+          const newWorker = registration.installing;
+          newWorker.addEventListener('statechange', () => {
+            if (newWorker.state === 'activated') {
+              console.log('New SW activated');
+            }
+          });
+        });
+        
       } catch (error) {
         console.error("SW registration failed:", error);
       }
@@ -126,6 +372,11 @@ class CapseraApp {
   }
 
   showScreen(screenName) {
+    // Save current form data before switching screens
+    if (this.currentScreen === 'submit') {
+      this.saveCurrentFormAsDraft();
+    }
+
     // Hide all screens
     document.querySelectorAll(".screen").forEach((screen) => {
       screen.classList.remove("active");
@@ -186,7 +437,17 @@ class CapseraApp {
       this.setupFeedbackForm();
     } catch (error) {
       console.error("Error loading ideas:", error);
-      container.innerHTML = '<div class="error">Failed to load ideas</div>';
+      
+      // Try to load from cache on error
+      try {
+        const cached = await dbHelper.getCachedIdeas();
+        this.ideas = cached || [];
+        this.renderIdeasList();
+        this.setupFeedbackForm();
+        this.showMessage(this.t("Loaded cached ideas (offline mode)"), "warning");
+      } catch (cacheError) {
+        container.innerHTML = '<div class="error">Failed to load ideas</div>';
+      }
     }
   }
 
@@ -195,7 +456,10 @@ class CapseraApp {
     if (!container) return;
 
     if (this.ideas.length === 0) {
-      container.innerHTML = `<div class="text-center">${this.t("No ideas found")}</div>`;
+      const message = this.isOnline ? 
+        this.t("No ideas found") : 
+        this.t("No cached ideas available offline");
+      container.innerHTML = `<div class="text-center">${message}</div>`;
       return;
     }
 
@@ -230,14 +494,15 @@ class CapseraApp {
             <input type="text" id="feedback-contact" class="form-input" 
                    placeholder="${this.t("Email or phone (optional)")}">
           </div>
-          <button type="submit" class="btn btn-primary">${this.t("Submit Feedback")}</button>
+          <button type="submit" class="btn btn-primary" ${!this.isOnline ? 'disabled' : ''}>
+            ${this.t("Submit Feedback")}${!this.isOnline ? ` (${this.t("Offline")})` : ''}
+          </button>
         </form>
       </div>
     `;
   }
 
   setupFeedbackForm() {
-    // Setup feedback form with translation support
     const trySetupForm = () => {
       const form = document.getElementById("feedback-form");
       if (!form) return false;
@@ -247,6 +512,11 @@ class CapseraApp {
 
       newForm.addEventListener("submit", async (e) => {
         e.preventDefault();
+
+        if (!this.isOnline) {
+          this.showMessage(this.t("Feedback submission requires internet connection"), "error");
+          return;
+        }
 
         const messageInput = newForm.querySelector("#feedback-message");
         const contactInput = newForm.querySelector("#feedback-contact");
@@ -274,10 +544,16 @@ class CapseraApp {
             anonymous: !contact,
           };
 
-          // TODO: Call supabaseHelper.submitFeedback(feedbackData)
-          // const result = await supabaseHelper.submitFeedback(feedbackData);
-
-          this.showMessage(this.t("Thank you for your feedback!"), "success");
+          // Store locally first for offline support
+          await dbHelper.saveFeedback(feedbackData);
+          
+          if (this.isOnline) {
+            // TODO: await supabaseHelper.submitFeedback(feedbackData);
+            this.showMessage(this.t("Thank you for your feedback!"), "success");
+          } else {
+            this.showMessage(this.t("Feedback saved locally, will sync when online"), "warning");
+          }
+          
           newForm.reset();
         } catch (error) {
           console.error("Feedback submission failed:", error);
@@ -320,7 +596,12 @@ class CapseraApp {
 
     try {
       // TODO: Call supabaseHelper.getIdeaDetails(ideaId)
-      const result = { restricted: true, message: this.t("Detailed view coming soon!") };
+      const result = { 
+        restricted: true, 
+        message: this.isOnline ? 
+          this.t("Detailed view coming soon!") : 
+          this.t("Detailed view requires internet connection")
+      };
 
       const modalBody = modal.querySelector(".modal-body");
 
@@ -361,7 +642,7 @@ class CapseraApp {
     }
   }
 
-  // Screen 2: My Submissions - Compact Design with Expand/Collapse
+  // Screen 2: My Submissions - Now with scroll frames for drafts
   async loadSubmissionsScreen() {
     const container = document.getElementById("submissions-list");
     if (!container) return;
@@ -409,7 +690,9 @@ class CapseraApp {
                     <div class="expand-arrow ${isExpanded ? "expanded" : ""}">${isExpanded ? "▼" : "▶"}</div>
                   </div>
                   <div class="submission-details ${isExpanded ? "expanded" : ""}" id="details-${submissionId}">
-                    ${projectDrafts.map(draft => this.renderSubmissionItem(draft, projectName)).join("")}
+                    <div class="drafts-scroll-frame">
+                      ${projectDrafts.map(draft => this.renderSubmissionItem(draft, projectName)).join("")}
+                    </div>
                   </div>
                 </div>
               `;
@@ -438,31 +721,35 @@ class CapseraApp {
     }
   }
 
- renderSubmissionItem(draft, projectName) {
-    const statusText = draft.is_final ? this.t("Final Submission") : ${this.t("Draft")} v${draft.version};
+  renderSubmissionItem(draft, projectName) {
+    const statusText = draft.is_final ? this.t("Final Submission") : `${this.t("Draft")} v${draft.version}`;
     const statusClass = draft.is_final ? "success" : "warning";
     const aiScore = draft.ai_feedback?.overall_score || draft.ai_feedback?.score;
+    const syncStatus = draft.needs_sync ? " (offline)" : "";
 
-    return 
+    return `
       <div class="submission-item-compact">
         <div class="submission-meta-compact">
-          <span class="status ${statusClass}">${statusText}</span>
-          <span class="submission-date">${new Date(draft.saved_at).toLocaleDateString()}</span>
-          ${aiScore ? <span class="ai-score">AI: ${aiScore}/100</span> : ""}
+          <span class="status ${statusClass}">${statusText}${syncStatus}</span>
+          <span class="submission-date">${new Date(draft.saved_at || draft.created_at).toLocaleDateString()}</span>
+          ${aiScore ? `<span class="ai-score">AI: ${aiScore}/100</span>` : ""}
         </div>
         ${this.renderAIFeedback(draft.ai_feedback)}
       </div>
-    ;
+    `;
   }
 
   // Screen 3: Enhanced Submit Ideas with Dynamic Forms and Translation
-  loadSubmitScreen() {
+  async loadSubmitScreen() {
     this.updateGreeting();
     this.setupSubmitForm();
     this.updateWordCounts();
-    this.setupUserSelectOptions();
+    await this.setupUserSelectOptions();
     this.setupCategoryMultiSelect();
-    this.checkCooldownStatus();
+    await this.checkCooldownStatus();
+    
+    // Check for and restore auto-saved drafts
+    setTimeout(() => this.restoreAutoSavedDraft(), 500);
   }
 
   updateGreeting() {
@@ -477,7 +764,6 @@ class CapseraApp {
       ];
       const randomGreeting = greetings[Math.floor(Math.random() * greetings.length)];
       
-      // Try to translate the greeting, fallback to English if translation not available
       const translatedGreeting = this.translations?.ui[randomGreeting] || randomGreeting;
       greetingElement.textContent = translatedGreeting;
     }
@@ -489,18 +775,77 @@ class CapseraApp {
     const cooldownElement = document.getElementById("cooldown-message");
     const cooldownDaysElement = document.getElementById("cooldown-days");
     
-    // Placeholder logic - replace with actual database check
-    const showCooldown = false;
-    
-    if (showCooldown) {
-      const cooldownDays = window.ENV.DRAFT_COOLDOWN_DAYS || 7;
-      cooldownElement.classList.remove("hidden");
-      if (cooldownDaysElement) {
-        cooldownDaysElement.textContent = cooldownDays;
+    // Check last submission date from drafts
+    try {
+      const drafts = await dbHelper.getDraftsByUserAndProject(this.currentUser, this.currentProject);
+      const finalSubmissions = drafts.filter(d => d.is_final);
+      
+      if (finalSubmissions.length > 0) {
+        const lastSubmission = finalSubmissions.sort((a, b) => 
+          new Date(b.created_at || b.saved_at) - new Date(a.created_at || a.saved_at)
+        )[0];
+        
+        const daysSinceSubmission = Math.floor(
+          (Date.now() - new Date(lastSubmission.created_at || lastSubmission.saved_at)) / (1000 * 60 * 60 * 24)
+        );
+        
+        const cooldownDays = window.ENV.DRAFT_COOLDOWN_DAYS || 7;
+        const showCooldown = daysSinceSubmission < cooldownDays;
+        
+        if (showCooldown) {
+          const remainingDays = cooldownDays - daysSinceSubmission;
+          cooldownElement.classList.remove("hidden");
+          if (cooldownDaysElement) {
+            cooldownDaysElement.textContent = remainingDays;
+          }
+          
+          // Disable form submission
+          const submitButton = document.getElementById("submit-button");
+          if (submitButton) {
+            submitButton.disabled = true;
+            submitButton.textContent = this.t("In Cooldown Period");
+          }
+          
+          return;
+        }
       }
-    } else {
-      cooldownElement.classList.add("hidden");
+    } catch (error) {
+      console.error("Error checking cooldown:", error);
     }
+    
+    cooldownElement.classList.add("hidden");
+    const submitButton = document.getElementById("submit-button");
+    if (submitButton) {
+      submitButton.disabled = false;
+      this.updateSubmitButtonText();
+    }
+  }
+
+  updateSubmitButtonText() {
+    const submitButton = document.getElementById("submit-button");
+    if (!submitButton || !this.currentUser || !this.currentProject) return;
+
+    // Determine current draft number
+    dbHelper.getDraftsByUserAndProject(this.currentUser, this.currentProject).then(existingDrafts => {
+      const realDrafts = existingDrafts.filter(d => d.version > 0);
+      const attemptNumber = realDrafts.length + 1;
+      
+      let buttonText;
+      if (attemptNumber <= 2) {
+        buttonText = `${this.t("Submit Draft")} ${attemptNumber}`;
+      } else if (attemptNumber === 3) {
+        buttonText = this.t("Submit Final Version");
+      } else {
+        buttonText = this.t("Maximum Reached");
+        submitButton.disabled = true;
+      }
+      
+      if (!this.isOnline) {
+        buttonText += ` (${this.t("Offline")})`;
+      }
+      
+      submitButton.textContent = buttonText;
+    });
   }
 
   setupSubmitForm() {
@@ -518,7 +863,6 @@ class CapseraApp {
       this.updateWordCountsBound = this.updateWordCounts.bind(this);
       input.addEventListener("input", this.updateWordCountsBound);
       
-      // Initialize auto-expand for textareas
       if (input.classList.contains("auto-expand")) {
         this.autoExpandTextarea(input);
       }
@@ -548,7 +892,6 @@ class CapseraApp {
     categorySelect.size = 5;
   }
 
-  // MODIFIED: Enhanced user selection with proper ID tracking
   async handleUserSelect(e) {
     const selectedValue = e.target.value;
     
@@ -558,27 +901,30 @@ class CapseraApp {
       await this.selectExistingUser(selectedValue);
     } else {
       this.currentUser = null;
-      this.currentUserId = null; // Clear user ID
+      this.currentUserId = null;
       this.currentProject = null;
-      this.projects = []; // Clear projects cache
-      this.setupProjectSelectOptions();
+      this.projects = [];
+      await this.setupProjectSelectOptions();
     }
     
     this.updateGreeting();
-    this.checkCooldownStatus();
+    await this.checkCooldownStatus();
+    this.updateSubmitButtonText();
   }
 
-  // MODIFIED: Enhanced project selection
   async handleProjectSelect(e) {
     if (e.target.value === "new") {
       await this.createNewProject();
     } else {
       this.currentProject = e.target.value;
     }
-    this.checkCooldownStatus();
+    await this.checkCooldownStatus();
+    this.updateSubmitButtonText();
+    
+    // Try to restore auto-saved draft for this project
+    setTimeout(() => this.restoreAutoSavedDraft(), 100);
   }
 
-  // MODIFIED: Enhanced project creation with immediate dropdown update and local persistence
   async createNewProject() {
     const projectName = prompt(this.t("Enter project name:"));
     if (!projectName || !projectName.trim()) return;
@@ -591,17 +937,18 @@ class CapseraApp {
     this.currentProject = projectName;
 
     try {
-      // OPTIMISTIC UI UPDATE: Add to local cache immediately
-      this.projects.push({ name: projectName, user_id: this.currentUserId, needs_sync: !this.isOnline });
+      this.projects.push({ 
+        name: projectName, 
+        user_id: this.currentUserId, 
+        needs_sync: !this.isOnline 
+      });
 
-      // Save to local storage immediately for persistence
       await this.saveProjectsLocally(this.currentUserId, this.projects);
 
-      // Save placeholder draft to establish project in database
       const placeholderDraft = {
         device_id: dbHelper.getDeviceId(),
         full_name: this.currentUser,
-        user_id: this.currentUserId, // FIXED: Use user_id instead of just user_name
+        user_id: this.currentUserId,
         project_name: projectName,
         ideal_customer_profile: "",
         product_idea: "",
@@ -611,31 +958,21 @@ class CapseraApp {
         heard_about: "",
         version: 0,
         is_final: false,
-        needs_sync: !this.isOnline
+        needs_sync: !this.isOnline,
+        saved_at: new Date().toISOString()
       };
 
       await dbHelper.saveDraft(placeholderDraft);
-
-      // Update dropdown immediately without page refresh
       await this.setupProjectSelectOptions();
       
-      // Select the newly created project in the dropdown
       const projectSelect = document.getElementById("project-select");
       if (projectSelect) {
         projectSelect.value = projectName;
       }
 
-      // If online, sync to server
       if (this.isOnline) {
         try {
-          // TODO: Add supabaseHelper.createProject method to create project on server
-          // await supabaseHelper.createProject({
-          //   name: projectName,
-          //   user_id: this.currentUserId,
-          //   created_by: this.currentUser
-          // });
-          
-          // Mark project as synced in local cache
+          // TODO: Add supabaseHelper.createProject method
           const projectIndex = this.projects.findIndex(p => p.name === projectName);
           if (projectIndex !== -1) {
             this.projects[projectIndex].needs_sync = false;
@@ -643,16 +980,15 @@ class CapseraApp {
           }
         } catch (error) {
           console.error("Failed to sync project to server:", error);
-          // Project remains marked as needs_sync for later
         }
       }
 
       this.showMessage(`${this.t("Project created")}: "${projectName}"!`, "success");
+      this.updateSubmitButtonText();
     } catch (error) {
       console.error("Error creating project:", error);
       this.showMessage(this.t("Failed to create project"), "error");
       
-      // Rollback optimistic update
       this.projects = this.projects.filter(p => p.name !== projectName);
       if (this.currentProject === projectName) {
         this.currentProject = null;
@@ -661,31 +997,22 @@ class CapseraApp {
     }
   }
 
-  // MODIFIED: Enhanced project options setup with local persistence
   async setupProjectSelectOptions() {
     const projectSelect = document.getElementById("project-select");
     if (!projectSelect || !this.currentUser) return;
 
-    // Load projects from local cache first (for offline support)
     if (this.currentUserId) {
       this.projects = await this.loadProjectsLocally(this.currentUserId);
     }
 
-    // If online, try to sync/refresh from server
     if (this.isOnline && this.currentUserId) {
       try {
         // TODO: Add supabaseHelper.getProjectsByUserId method
-        // const serverProjects = await supabaseHelper.getProjectsByUserId(this.currentUserId);
-        // Merge with local projects, preferring server data
-        // this.projects = this.mergeProjects(this.projects, serverProjects);
-        // await this.saveProjectsLocally(this.currentUserId, this.projects);
       } catch (error) {
         console.error("Failed to load projects from server:", error);
-        // Continue with local projects
       }
     }
 
-    // Fallback: Get projects from user drafts if no cached projects
     if (!this.projects.length) {
       const userDrafts = await dbHelper.getDraftsByUser(this.currentUser);
       const projectNames = [...new Set(userDrafts.map((d) => d.project_name || "Default Project"))];
@@ -700,7 +1027,6 @@ class CapseraApp {
       }
     }
 
-    // Render dropdown options
     projectSelect.innerHTML = `
       <option value="">${this.t("Select Project")}</option>
       <option value="new">${this.t("Create New Project")}</option>
@@ -712,7 +1038,6 @@ class CapseraApp {
     `;
   }
 
-  // ADDED: Local storage methods for projects per user
   async saveProjectsLocally(userId, projects) {
     if (!userId) return;
     
@@ -723,11 +1048,9 @@ class CapseraApp {
         updated_at: new Date().toISOString()
       };
       
-      // Try IndexedDB first via dbHelper, fallback to localStorage
       try {
         await dbHelper.saveSetting(key, data);
       } catch (error) {
-        // Fallback to localStorage
         localStorage.setItem(key, JSON.stringify(data));
       }
     } catch (error) {
@@ -741,7 +1064,6 @@ class CapseraApp {
     try {
       const key = `capsera_projects_${userId}`;
       
-      // Try IndexedDB first via dbHelper
       try {
         const data = await dbHelper.getSetting(key);
         if (data && data.projects) {
@@ -751,7 +1073,6 @@ class CapseraApp {
         console.log("IndexedDB fallback failed, trying localStorage");
       }
       
-      // Fallback to localStorage
       const stored = localStorage.getItem(key);
       if (stored) {
         const data = JSON.parse(stored);
@@ -764,7 +1085,6 @@ class CapseraApp {
     return [];
   }
 
-  // ADDED: Sync offline projects to server when online
   async syncOfflineProjects() {
     if (!this.isOnline || !this.currentUserId) return;
 
@@ -774,13 +1094,7 @@ class CapseraApp {
     let syncedCount = 0;
     for (const project of unsynced) {
       try {
-        // TODO: Call supabaseHelper.createProject when that method is available
-        // await supabaseHelper.createProject({
-        //   name: project.name,
-        //   user_id: this.currentUserId,
-        //   created_by: this.currentUser
-        // });
-        
+        // TODO: Call supabaseHelper.createProject when available
         project.needs_sync = false;
         syncedCount++;
       } catch (error) {
@@ -791,7 +1105,7 @@ class CapseraApp {
     if (syncedCount > 0) {
       await this.saveProjectsLocally(this.currentUserId, this.projects);
       this.showMessage(`Synced ${syncedCount} projects to server`, "success");
-      await this.setupProjectSelectOptions(); // Refresh dropdown to remove (offline) indicators
+      await this.setupProjectSelectOptions();
     }
   }
 
@@ -832,7 +1146,6 @@ class CapseraApp {
     });
   }
 
-  // Enhanced submission handling with draft progression and translation
   async handleSubmission(e) {
     e.preventDefault();
 
@@ -848,13 +1161,12 @@ class CapseraApp {
 
     const formData = new FormData(e.target);
     const categorySelect = document.getElementById("category");
-    const selectedCategories = Array.from(categorySelect.selectedOptions).map(option => option.value);
+    const selectedCategories = Array.from(categorySelect?.selectedOptions || []).map(option => option.value);
 
-    // Build submission object
     const submission = {
       device_id: dbHelper.getDeviceId(),
       full_name: this.currentUser,
-      user_id: this.currentUserId, // FIXED: Include user_id instead of just user_name
+      user_id: this.currentUserId,
       project_name: this.currentProject,
       ideal_customer_profile: formData.get("ideal_customer_profile"),
       product_idea: formData.get("product_idea"),
@@ -868,9 +1180,10 @@ class CapseraApp {
       investor_pitch: formData.get("investor_pitch"),
       additional_research: formData.get("additional_research"),
       mvp_link: formData.get("mvp_link"),
+      needs_sync: !this.isOnline,
+      saved_at: new Date().toISOString()
     };
 
-    // Validate submission
     const validationResult = await validation.validateSubmission(submission, this.ideas);
 
     if (!validationResult.passed) {
@@ -880,30 +1193,51 @@ class CapseraApp {
 
     submission.quality_score = validationResult.qualityScore;
 
-    // Determine draft number
     const existingDrafts = await dbHelper.getDraftsByUserAndProject(this.currentUser, this.currentProject);
     const realDrafts = existingDrafts.filter((d) => d.version > 0);
     const attemptNumber = realDrafts.length + 1;
     submission.version = attemptNumber;
 
     try {
+      const submitButton = document.getElementById("submit-button");
+      const originalText = submitButton?.textContent;
+      if (submitButton) {
+        submitButton.textContent = this.t("Submitting...");
+        submitButton.disabled = true;
+      }
+
       if (attemptNumber <= 2) {
-        // Draft submissions
         if (attemptNumber === 1) {
           submission.first_draft_submitted_at = new Date().toISOString();
         }
 
         await dbHelper.saveDraft(submission);
         
-        this.showMessage(`${this.t("Draft")} ${attemptNumber} ${this.t("saved")}! AI feedback coming soon.`, "success");
+        const statusMsg = this.isOnline ? 
+          `${this.t("Draft")} ${attemptNumber} ${this.t("saved")}! AI feedback coming soon.` :
+          `${this.t("Draft")} ${attemptNumber} ${this.t("saved locally")}! Will sync when online.`;
+        
+        this.showMessage(statusMsg, "success");
+        
+        // Clear auto-saved drafts for this project
+        const autoSaved = existingDrafts.filter(d => d.auto_saved && d.version === 0);
+        for (const draft of autoSaved) {
+          await dbHelper.deleteDraft(draft.id);
+        }
+        
         this.clearForm();
-        this.checkCooldownStatus();
+        await this.checkCooldownStatus();
         
       } else if (attemptNumber === 3) {
-        // Final submission
         const confirmed = confirm(this.t("This is your final submission! Are you sure you're ready?"));
         
-        if (!confirmed) return;
+        if (!confirmed) {
+          if (submitButton) {
+            submitButton.textContent = originalText;
+            submitButton.disabled = false;
+          }
+          return;
+        }
 
         submission.is_final = true;
 
@@ -915,7 +1249,12 @@ class CapseraApp {
         }
 
         await dbHelper.saveDraft(submission);
-        this.showMessage(this.t("Idea submitted successfully! Thank you!"), "success");
+        
+        const finalMsg = this.isOnline ?
+          this.t("Idea submitted successfully! Thank you!") :
+          this.t("Final submission saved locally! Will sync when online.");
+          
+        this.showMessage(finalMsg, "success");
         this.clearForm();
         
       } else {
@@ -924,6 +1263,12 @@ class CapseraApp {
     } catch (error) {
       console.error("Submission error:", error);
       this.showMessage(`${this.t("Submission failed")}: ${error.message}`, "error");
+    } finally {
+      const submitButton = document.getElementById("submit-button");
+      if (submitButton && originalText) {
+        submitButton.textContent = originalText;
+        submitButton.disabled = false;
+      }
     }
   }
 
@@ -1058,30 +1403,77 @@ class CapseraApp {
     }
   }
 
-  // Utility methods with translation support
+  // Enhanced offline data sync with better error handling
   async syncOfflineData() {
     if (!this.isOnline) return;
 
-    const queue = await dbHelper.getSyncQueue();
-    let syncedCount = 0;
+    try {
+      const queue = await dbHelper.getSyncQueue();
+      let syncedCount = 0;
+      let failedCount = 0;
 
-    for (const item of queue) {
-      try {
-        await dbHelper.removeFromSyncQueue(item.key);
-        syncedCount++;
-      } catch (error) {
-        console.error("Sync failed for item:", item.key, error);
+      for (const item of queue) {
+        try {
+          // TODO: Implement actual server sync based on item type
+          // if (item.type === 'draft') {
+          //   await supabaseHelper.submitFinalIdea(item.data);
+          // } else if (item.type === 'feedback') {
+          //   await supabaseHelper.submitFeedback(item.data);
+          // }
+          
+          await dbHelper.removeFromSyncQueue(item.key);
+          syncedCount++;
+        } catch (error) {
+          console.error("Sync failed for item:", item.key, error);
+          failedCount++;
+        }
       }
-    }
 
-    if (syncedCount > 0) {
-      this.showMessage(`Synced ${syncedCount} submissions`, "success");
-    }
+      if (syncedCount > 0) {
+        this.showMessage(`Synced ${syncedCount} items${failedCount > 0 ? `, ${failedCount} failed` : ''}`, 
+          failedCount > 0 ? "warning" : "success");
+      }
 
-    // ADDED: Also sync projects when syncing other data
-    await this.syncOfflineProjects();
+      // Sync projects
+      await this.syncOfflineProjects();
+      
+      // Sync drafts that need syncing
+      await this.syncOfflineDrafts();
+      
+    } catch (error) {
+      console.error("Sync operation failed:", error);
+      this.showMessage(this.t("Sync failed. Will retry later."), "error");
+    }
   }
 
+  async syncOfflineDrafts() {
+    try {
+      const allDrafts = await dbHelper.getAllDrafts();
+      const unsyncedDrafts = allDrafts.filter(d => d.needs_sync);
+      
+      let syncedCount = 0;
+      for (const draft of unsyncedDrafts) {
+        try {
+          if (draft.is_final) {
+            // TODO: await supabaseHelper.submitFinalIdea(draft);
+          }
+          // TODO: Mark draft as synced in database
+          // await dbHelper.markDraftAsSynced(draft.id);
+          syncedCount++;
+        } catch (error) {
+          console.error(`Failed to sync draft ${draft.id}:`, error);
+        }
+      }
+      
+      if (syncedCount > 0) {
+        console.log(`Synced ${syncedCount} drafts`);
+      }
+    } catch (error) {
+      console.error("Failed to sync drafts:", error);
+    }
+  }
+
+  // Utility methods with translation support
   showMessage(message, type = "info") {
     const toast = document.createElement("div");
     toast.className = `toast ${type}`;
@@ -1135,14 +1527,13 @@ class CapseraApp {
     try {
       await dbHelper.deleteUser(fullName);
       this.showMessage(this.t("User deleted"), "success");
-      this.loadUsersList();
+      await this.loadUsersList();
     } catch (error) {
       console.error("Delete user error:", error);
       this.showMessage(this.t("Failed to delete user"), "error");
     }
   }
 
-  // MODIFIED: Enhanced user creation with proper ID tracking
   async showUserCreationForm() {
     const name = prompt(this.t("What's your full name?"));
     if (!name) return;
@@ -1158,35 +1549,31 @@ class CapseraApp {
       const userData = await dbHelper.saveUser(name, pinHash);
 
       this.currentUser = name;
-      this.currentUserId = userData.id; // Store the local user ID
-      this.projects = []; // Reset projects for new user
+      this.currentUserId = userData.id;
+      this.projects = [];
       
-      // If online, create user on server and get UUID
       if (this.isOnline) {
         try {
           // TODO: Call supabaseHelper.createOrGetUser when implementation is available
           // const serverUser = await supabaseHelper.createOrGetUser(name, dbHelper.getDeviceId());
-          // this.currentUserId = serverUser.id; // Use server UUID instead
-          // 
-          // Update local user with server UUID
+          // this.currentUserId = serverUser.id;
           // await dbHelper.saveUser(name, pinHash, serverUser.id);
         } catch (error) {
           console.error("Failed to create user on server:", error);
-          // Continue with local user ID
         }
       }
 
-      this.setupUserSelectOptions();
-      this.setupProjectSelectOptions();
+      await this.setupUserSelectOptions();
+      await this.setupProjectSelectOptions();
       this.updateGreeting();
       this.showMessage(`${this.t("User created")}: ${name}!`, "success");
+      this.updateSubmitButtonText();
     } catch (error) {
       console.error("User creation error:", error);
       this.showMessage(this.t("Failed to create user"), "error");
     }
   }
 
-  // MODIFIED: Enhanced existing user selection with proper ID tracking
   async selectExistingUser(fullName) {
     const pin = prompt(this.t("Enter your PIN:"));
     if (!pin) {
@@ -1202,12 +1589,13 @@ class CapseraApp {
     }
 
     this.currentUser = fullName;
-    this.currentUserId = localUser.user_uuid || localUser.id; // Prefer server UUID, fallback to local ID
+    this.currentUserId = localUser.user_uuid || localUser.id;
     this.currentProject = null;
-    this.projects = []; // Reset projects, will be loaded in setupProjectSelectOptions
+    this.projects = [];
     
     await this.setupProjectSelectOptions();
     this.showMessage(`${this.t("Welcome back")}, ${fullName}!`, "success");
+    this.updateSubmitButtonText();
   }
 
   resetUserDropdownToPrevious() {
@@ -1229,12 +1617,62 @@ document.addEventListener("DOMContentLoaded", () => {
   window.app = new CapseraApp();
 });
 
-// Add CSS animation for toast
+// Add CSS animations
 const style = document.createElement('style');
 style.textContent = `
   @keyframes slideInRight {
     from { transform: translateX(100%); opacity: 0; }
     to { transform: translateX(0); opacity: 1; }
+  }
+  
+  @keyframes slideDown {
+    from { transform: translateY(-100%); opacity: 0; }
+    to { transform: translateY(0); opacity: 1; }
+  }
+  
+  .drafts-scroll-frame {
+    max-height: 300px;
+    overflow-y: auto;
+    border: 1px solid var(--capsera-border, #ddd);
+    border-radius: 4px;
+    padding: 10px;
+    background: #f9f9f9;
+  }
+  
+  .submission-details {
+    max-height: 0;
+    overflow: hidden;
+    transition: max-height 0.3s ease-out;
+  }
+  
+  .submission-details.expanded {
+    max-height: 400px;
+    overflow-y: auto;
+  }
+  
+  .offline-banner {
+    z-index: 1002 !important;
+  }
+  
+  .offline-content {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 10px;
+  }
+  
+  .offline-dismiss {
+    background: none;
+    border: none;
+    color: #212529;
+    font-size: 18px;
+    cursor: pointer;
+    padding: 0 5px;
+  }
+  
+  .offline-dismiss:hover {
+    background: rgba(0,0,0,0.1);
+    border-radius: 50%;
   }
 `;
 document.head.appendChild(style);
