@@ -205,7 +205,7 @@ export const validation = {
 
     console.log("🔧 VALIDATION DEBUG: DUPLICATE check passed");
     return { isDuplicate: false };
-  },y
+  },
 
   // Improved similarity calculation using multiple methods
   async calculateSimilarity(text1, text2) {
