@@ -1,4 +1,4 @@
-// validation.js - Enhanced validation with field name-based approach and draft-specific rules
+// validation.js - Enhanced Criteria A validation with proper 3-draft system and strict AI grading
 export const validation = {
   // Helper to extract text from submission object
   extractTextFromSubmission(submission) {
@@ -11,13 +11,6 @@ export const validation = {
       submission.product_idea,
       submission.pain_points,
       submission.alternatives,
-      // Draft 2 fields
-      submission.market_validation,
-      submission.competitor_research,
-      submission.mvp_development,
-      // Draft 3 fields
-      submission.investor_pitch,
-      submission.additional_research,
       Array.isArray(submission.category)
         ? submission.category.join(" ")
         : submission.category,
@@ -208,7 +201,7 @@ export const validation = {
   },
 
   // Improved similarity calculation using multiple methods
-  async calculateSimilarity(text1, text2) {
+  calculateSimilarity(text1, text2) {
     if (!text1 || !text2) return 0;
 
     // Method 1: Jaccard similarity on words (length > 3)
@@ -464,121 +457,117 @@ export const validation = {
     };
   },
 
-  // Field name-based validation for different draft stages
-  validateRequiredFields(submission, draftNumber = 1) {
-    console.log("🔧 VALIDATION DEBUG: Checking required fields for draft", draftNumber);
+  // Check for technical feasibility indicators
+  checkTechnicalFeasibility(submission) {
+    const allText = this.extractTextFromSubmission(submission).toLowerCase();
 
-    const errors = [];
-    
-    // Draft 1 required fields
-    const draft1Fields = {
-      ideal_customer_profile: "Who would love this?",
-      product_idea: "What's your solution?",
-      pain_points: "What problems does this solve?",
-      alternatives: "What alternatives exist?"
-    };
+    const complexityIndicators = [
+      "ai",
+      "machine learning",
+      "blockchain",
+      "quantum",
+      "neural network",
+      "cryptocurrency",
+      "autonomous",
+    ];
 
-    // Draft 2 required fields (in addition to draft 1)
-    const draft2Fields = {
-      market_validation: "Did you talk to potential customers?",
-      competitor_research: "How deep did you research competitors?"
-    };
+    const simplicityIndicators = [
+      "simple",
+      "basic",
+      "straightforward",
+      "easy to build",
+      "minimal viable product",
+      "mvp",
+    ];
 
-    // Draft 3 required fields (in addition to previous)
-    const draft3Fields = {
-      investor_pitch: "Your investor pitch"
-    };
+    const complexityScore = complexityIndicators.filter((indicator) =>
+      allText.includes(indicator)
+    ).length;
 
-    // Check required fields based on draft number
-    let requiredFields = { ...draft1Fields };
-    if (draftNumber >= 2) {
-      requiredFields = { ...requiredFields, ...draft2Fields };
-    }
-    if (draftNumber >= 3) {
-      requiredFields = { ...requiredFields, ...draft3Fields };
-    }
-
-    // Validate each required field
-    Object.entries(requiredFields).forEach(([fieldName, displayName]) => {
-      const value = submission[fieldName];
-      if (!value || (typeof value === 'string' && value.trim().length === 0)) {
-        errors.push(`${displayName} is required`);
-        console.log(`🔧 VALIDATION DEBUG: Missing required field: ${fieldName}`);
-      }
-    });
+    const simplicityScore = simplicityIndicators.filter((indicator) =>
+      allText.includes(indicator)
+    ).length;
 
     return {
-      passed: errors.length === 0,
-      errors,
-      requiredFieldsCount: Object.keys(requiredFields).length
+      complexity: complexityScore,
+      simplicity: simplicityScore,
+      feasibilityScore: Math.max(0, 10 - complexityScore + simplicityScore),
     };
   },
 
-  // Validate submission completeness with draft-specific requirements
-  validateCompleteness(submission, draftNumber = 1) {
-    console.log("🔧 VALIDATION DEBUG: Checking completeness for draft", draftNumber);
+  // Check for market understanding
+  checkMarketUnderstanding(submission) {
+    const allText = this.extractTextFromSubmission(submission).toLowerCase();
 
-    const fieldValidation = this.validateRequiredFields(submission, draftNumber);
-    
-    if (!fieldValidation.passed) {
-      return {
-        complete: false,
-        missingRequired: fieldValidation.errors,
-        missingOptional: [],
-        completionScore: Math.max(0, 100 - (fieldValidation.errors.length / fieldValidation.requiredFieldsCount) * 100)
-      };
-    }
+    const marketKeywords = [
+      "target market",
+      "market research",
+      "competitive analysis",
+      "user research",
+      "customer interviews",
+      "market size",
+      "addressable market",
+      "market opportunity",
+    ];
 
-    // Check optional fields
+    const marketScore = marketKeywords.filter((keyword) =>
+      allText.includes(keyword)
+    ).length;
+
+    return {
+      marketAwareness: marketScore > 0,
+      marketScore: Math.min(marketScore * 2, 10),
+    };
+  },
+
+  // Validate submission completeness
+  validateCompleteness(submission) {
+    console.log("🔧 VALIDATION DEBUG: Checking completeness");
+
+    const requiredFields = [
+      "ideal_customer_profile",
+      "product_idea",
+      "pain_points",
+      "alternatives",
+    ];
+
+    const missingFields = requiredFields.filter(
+      (field) => !submission[field] || submission[field].trim().length === 0
+    );
+
     const optionalFields = ["category", "heard_about"];
-    if (draftNumber >= 2) {
-      optionalFields.push("mvp_development", "product_photo");
-    }
-    if (draftNumber >= 3) {
-      optionalFields.push("additional_research", "mvp_link");
-    }
-
     const missingOptional = optionalFields.filter(
-      (field) => {
-        const value = submission[field];
-        return !value || 
-               (Array.isArray(value) && value.length === 0) ||
-               (typeof value === 'string' && value.trim().length === 0);
-      }
+      (field) =>
+        !submission[field] ||
+        (Array.isArray(submission[field]) && submission[field].length === 0)
     );
 
     console.log("🔧 VALIDATION DEBUG: Completeness check", {
-      missingRequired: [],
+      missingRequired: missingFields,
       missingOptional: missingOptional,
     });
 
     return {
-      complete: true,
-      missingRequired: [],
+      complete: missingFields.length === 0,
+      missingRequired: missingFields,
       missingOptional: missingOptional,
-      completionScore: Math.max(0, 100 - missingOptional.length * 5),
+      completionScore: Math.max(
+        0,
+        100 - missingFields.length * 25 - missingOptional.length * 5
+      ),
     };
   },
 
-  // Enhanced validation function with draft-specific logic
-  async validateSubmission(submission, existingIdeas = [], draftNumber = 1) {
+  // Main validation function - Enhanced Criteria A with comprehensive debugging
+  async validateSubmission(submission, existingIdeas = []) {
     console.log(
       "🔧 VALIDATION DEBUG: ========== STARTING VALIDATION =========="
     );
     console.log("🔧 VALIDATION DEBUG: Submission data:", {
-      draftNumber,
       hasCustomerProfile: !!submission.ideal_customer_profile,
       hasProductIdea: !!submission.product_idea,
       hasPainPoints: !!submission.pain_points,
       hasAlternatives: !!submission.alternatives,
-      // Draft 2 fields
-      hasMarketValidation: !!submission.market_validation,
-      hasCompetitorResearch: !!submission.competitor_research,
-      hasMvpDevelopment: !!submission.mvp_development,
-      // Draft 3 fields
-      hasInvestorPitch: !!submission.investor_pitch,
-      hasAdditionalResearch: !!submission.additional_research,
-      hasMvpLink: !!submission.mvp_link,
       categories: submission.category,
       existingIdeasCount: existingIdeas?.length || 0,
     });
@@ -588,10 +577,9 @@ export const validation = {
       errors: [],
       warnings: [],
       qualityScore: 0,
-      draftNumber,
     };
 
-    // Ensure category is always an array for consistency
+    // Ensure category is always an array for consistency with Supabase text[] type
     if (!Array.isArray(submission.category)) {
       if (submission.category) {
         submission.category = [submission.category];
@@ -605,12 +593,12 @@ export const validation = {
       submission.category
     );
 
-    // Check completeness based on draft number
-    const completeness = this.validateCompleteness(submission, draftNumber);
+    // Check completeness first
+    const completeness = this.validateCompleteness(submission);
     if (!completeness.complete) {
       results.passed = false;
-      completeness.missingRequired.forEach((error) => {
-        results.errors.push(`REQUIRED_FIELD_MISSING: ${error}`);
+      completeness.missingRequired.forEach((field) => {
+        results.errors.push(`REQUIRED_FIELD_MISSING: ${field} is required`);
       });
     }
 
@@ -628,91 +616,52 @@ export const validation = {
       results.errors.push(`PRIVACY: ${privacyCheck.reason}`);
     }
 
-    // Check DUPLICATES (only for final submissions)
-    if (draftNumber >= 3) {
-      const duplicateCheck = await this.checkDuplicates(
-        submission,
-        existingIdeas
-      );
-      if (duplicateCheck.isDuplicate) {
-        results.passed = false;
-        results.errors.push(`DUPLICATE: ${duplicateCheck.reason}`);
-      }
+    // Check DUPLICATES
+    const duplicateCheck = await this.checkDuplicates(
+      submission,
+      existingIdeas
+    );
+    if (duplicateCheck.isDuplicate) {
+      results.passed = false;
+      results.errors.push(`DUPLICATE: ${duplicateCheck.reason}`);
     }
 
-    // Calculate QUALITY score with draft-specific adjustments
-    let qualityScore = this.calculateQualityScore(submission);
-    
-    // Bonus points for draft 2 and 3 completeness
-    if (draftNumber >= 2) {
-      if (submission.market_validation && submission.market_validation.length > 50) {
-        qualityScore += 5;
-      }
-      if (submission.competitor_research && submission.competitor_research.length > 50) {
-        qualityScore += 5;
-      }
-    }
-    
-    if (draftNumber >= 3) {
-      if (submission.investor_pitch && submission.investor_pitch.length > 30) {
-        qualityScore += 10;
-      }
-      if (submission.mvp_link) {
-        qualityScore += 5;
-      }
-    }
+    // Calculate QUALITY score (stricter thresholds)
+    const qualityScore = this.calculateQualityScore(submission);
+    results.qualityScore = qualityScore;
 
-    results.qualityScore = Math.min(qualityScore, 100);
-
-    // Draft-specific quality thresholds
-    const minThresholds = { 1: 25, 2: 35, 3: 45 };
-    const minThreshold = minThresholds[draftNumber] || 25;
-
-    if (results.qualityScore < minThreshold) {
+    // Stricter quality thresholds
+    if (qualityScore < 30) {
       results.passed = false;
       results.errors.push(
-        `QUALITY_LOW: Quality score ${results.qualityScore}/100 is below minimum threshold (${minThreshold}) for draft ${draftNumber}`
+        `QUALITY_LOW: Quality score ${qualityScore}/100 is below minimum threshold (30)`
       );
-    } else if (results.qualityScore < minThreshold + 15) {
+    } else if (qualityScore < 50) {
       results.warnings.push(
-        `Quality score ${results.qualityScore}/100 could be improved. Consider adding more detail.`
+        `Quality score ${qualityScore}/100 is relatively low. Consider adding more detail.`
       );
     }
 
-    // Word count validations (draft 1 fields always validated)
-    const baseValidations = [
+    // Stricter word count validations
+    const validations = [
       { field: "product_idea", min: 15, max: 300 },
       { field: "ideal_customer_profile", min: 10, max: 200 },
       { field: "pain_points", min: 15, max: 250 },
       { field: "alternatives", min: 5, max: 200 },
     ];
 
-    // Add draft-specific validations
-    if (draftNumber >= 2) {
-      baseValidations.push(
-        { field: "market_validation", min: 20, max: 400 },
-        { field: "competitor_research", min: 15, max: 350 }
-      );
-    }
-
-    if (draftNumber >= 3) {
-      baseValidations.push(
-        { field: "investor_pitch", min: 20, max: 150 }
-      );
-    }
-
-    baseValidations.forEach(({ field, min, max }) => {
+    validations.forEach(({ field, min, max }) => {
       if (submission[field]) {
         const wordCheck = this.validateWordCount(submission[field], min, max);
         if (!wordCheck.valid) {
           if (wordCheck.count < min) {
             results.passed = false;
             results.errors.push(
-              `WORD_COUNT_LOW: ${field.replace('_', ' ')} too short (${wordCheck.count} words, minimum ${min})`
+              `WORD_COUNT_LOW: ${field} too short (${wordCheck.count} words, minimum ${min})`
             );
           } else if (wordCheck.count > max) {
             results.warnings.push(
-              `WORD_COUNT_HIGH: ${field.replace('_', ' ')} very long (${wordCheck.count} words, maximum ${max})`
+              `WORD_COUNT_HIGH: ${field} very long (${wordCheck.count} words, maximum ${max})`
             );
           }
         }
@@ -722,11 +671,59 @@ export const validation = {
     // Enhanced category validation
     if (submission.category.length === 0) {
       results.warnings.push(
-        "No categories selected - this helps with organization"
+        "No categories selected - this helps with categorization"
       );
     } else if (submission.category.length > 5) {
       results.warnings.push(
         "Too many categories selected (max 5) - focus on the most relevant"
+      );
+    }
+
+    // Content quality checks
+    const allText = this.extractTextFromSubmission(submission).toLowerCase();
+
+    // Check for minimal effort indicators
+    const minimalEffortPhrases = [
+      "i need help",
+      "please help",
+      "any ideas",
+      "what do you think",
+      "not sure",
+      "dont know",
+      "maybe something",
+      "just an idea",
+    ];
+
+    const minimalEffortFound = minimalEffortPhrases.some((phrase) =>
+      allText.includes(phrase)
+    );
+
+    if (minimalEffortFound) {
+      results.warnings.push(
+        "Consider providing more specific details and concrete plans"
+      );
+    }
+
+    // Check for business viability indicators
+    const businessKeywords = [
+      "revenue",
+      "profit",
+      "business model",
+      "monetize",
+      "pricing",
+      "market size",
+      "customers",
+      "demand",
+      "value proposition",
+    ];
+
+    const businessMatches = businessKeywords.filter((keyword) =>
+      allText.includes(keyword)
+    ).length;
+
+    if (businessMatches === 0) {
+      results.warnings.push(
+        "Consider addressing business model and monetization strategy"
       );
     }
 
@@ -738,7 +735,6 @@ export const validation = {
       errorsCount: results.errors.length,
       warningsCount: results.warnings.length,
       qualityScore: results.qualityScore,
-      draftNumber: results.draftNumber,
       errors: results.errors,
       warnings: results.warnings.slice(0, 3), // Show first 3 warnings
     });
