@@ -35,7 +35,7 @@
       </div>
     </div>
 
-    <!-- Screen 2: My Submissions -->
+    <!-- Screen 2: My Submissions - Compact Design -->
     <div id="submissions-screen" class="screen">
       <h2 data-ui-key="My Submissions">My Submissions</h2>
       <div id="submissions-list">
@@ -43,146 +43,314 @@
       </div>
     </div>
 
-    <!-- Screen 3: Submit Ideas -->
+    <!-- Screen 3: Submit Ideas - Dynamic Forms -->
     <div id="submit-screen" class="screen">
-      <h2 data-ui-key="Submit Ideas">Submit Ideas</h2>
+      <div id="greeting-section" class="greeting-section">
+        <h2 id="greeting-text">Hey there! Ready to share your idea?</h2>
+        <div class="info-tip">
+          <span class="info-icon">💡</span>
+          <span class="info-text">We rate ideas kindly — see tips below for better scores!</span>
+        </div>
+      </div>
+
+      <!-- Cooldown Message -->
+      <div id="cooldown-message" class="cooldown-message hidden">
+        <div class="cooldown-content">
+          <h3>🕒 Research Time!</h3>
+          <p>Please conduct customer interviews and market research.</p>
+          <p><strong>Next submission available in: <span id="cooldown-days"></span> days</strong></p>
+          <div class="cooldown-tips">
+            <strong>Suggested activities:</strong>
+            <ul>
+              <li>Interview 5-10 potential customers</li>
+              <li>Research existing competitors thoroughly</li>
+              <li>Create a basic prototype or mockup</li>
+            </ul>
+          </div>
+        </div>
+      </div>
 
       <!-- User and Project Selection -->
       <div class="user-project-selection">
         <div class="form-group">
-          <label class="form-label">Select User</label>
-          <select id="user-select" class="form-select" required>
+          <label class="form-label">Who are you?</label>
+          <select id="user-select" class="form-select">
             <option value="">Select User</option>
           </select>
         </div>
         
         <div class="form-group">
-          <label class="form-label">Select Project</label>
-          <select id="project-select" class="form-select" required>
+          <label class="form-label">Which project?</label>
+          <select id="project-select" class="form-select">
             <option value="">Select Project</option>
           </select>
         </div>
       </div>
 
-      <form id="submit-form">
-        <!-- Customer Profile -->
-        <div class="form-group">
-          <label class="form-label" data-ui-key="Required">
-            Ideal Customer Profile <span class="required">*</span>
-          </label>
-          <div class="input-with-icon" data-tooltip-key="ideal_customer_profile">
-            <textarea id="ideal_customer_profile" name="ideal_customer_profile" 
-                     class="form-textarea" required
-                     placeholder="Describe who would use your product..."></textarea>
-            <span class="tooltip-icon">👁️
-              <span class="tooltip-text">
-                Describe who would use your product - their age, job, problems they face, etc.
-              </span>
-            </span>
+      <!-- Draft Selection for Final Submission -->
+      <div id="draft-sidebar" class="draft-sidebar hidden">
+        <div class="sidebar-content">
+          <h4>Previous Drafts</h4>
+          <div id="draft-selector">
+            <!-- Populated by JS -->
           </div>
-          <div id="ideal_customer_profile-count" class="word-counter">0 words (10-200)</div>
-        </div>
-
-        <!-- Product Idea -->
-        <div class="form-group">
-          <label class="form-label" data-ui-key="Required">
-            Product Idea <span class="required">*</span>
-          </label>
-          <div class="input-with-icon" data-tooltip-key="product_idea">
-            <textarea id="product_idea" name="product_idea" 
-                     class="form-textarea" required
-                     placeholder="Explain your product idea..."></textarea>
-            <span class="tooltip-icon">👁️
-              <span class="tooltip-text">
-                Explain your product idea clearly - what does it do and how does it help people?
-              </span>
-            </span>
+          <div id="draft-preview">
+            <!-- Selected draft content -->
           </div>
-          <div id="product_idea-count" class="word-counter">0 words (15-300)</div>
         </div>
+      </div>
 
-        <!-- Pain Points -->
-        <div class="form-group">
-          <label class="form-label" data-ui-key="Required">
-            Pain Points <span class="required">*</span>
-          </label>
-          <div class="input-with-icon" data-tooltip-key="pain_points">
-            <textarea id="pain_points" name="pain_points" 
-                     class="form-textarea" required
-                     placeholder="What problems does this solve?"></textarea>
-            <span class="tooltip-icon">👁️
-              <span class="tooltip-text">
-                What specific problems or frustrations does your target customer experience?
-              </span>
-            </span>
+      <!-- Main Form -->
+      <div id="main-form-container" class="main-form-container">
+        <form id="submit-form">
+          <!-- Draft 1: Core Questions -->
+          <div id="draft-1-questions" class="draft-questions">
+            <div class="section-header">
+              <h3>Tell us about your idea</h3>
+            </div>
+
+            <!-- Customer Profile -->
+            <div class="form-group">
+              <label class="form-label">
+                Who would love this? <span class="field-required">*</span>
+              </label>
+              <div class="input-with-icon">
+                <textarea id="ideal_customer_profile" name="ideal_customer_profile" 
+                         class="form-textarea auto-expand" 
+                         placeholder="Describe your target customers - their age, job, daily problems they face..."></textarea>
+                <span class="tooltip-icon">💡
+                  <span class="tooltip-text">
+                    Think specific! Instead of "everyone", describe who would use this daily - their demographics, pain points, and current behavior.
+                  </span>
+                </span>
+              </div>
+              <div id="ideal_customer_profile-count" class="word-counter">0 words (10-200)</div>
+            </div>
+
+            <!-- Product Idea -->
+            <div class="form-group">
+              <label class="form-label">
+                What's your solution? <span class="field-required">*</span>
+              </label>
+              <div class="input-with-icon">
+                <textarea id="product_idea" name="product_idea" 
+                         class="form-textarea auto-expand" 
+                         placeholder="Explain your product idea clearly - what does it do and how does it help people?"></textarea>
+                <span class="tooltip-icon">💡
+                  <span class="tooltip-text">
+                    Focus on the value! Explain what your product does and why people would choose it over existing options.
+                  </span>
+                </span>
+              </div>
+              <div id="product_idea-count" class="word-counter">0 words (15-300)</div>
+            </div>
+
+            <!-- Pain Points -->
+            <div class="form-group">
+              <label class="form-label">
+                What problems does this solve? <span class="field-required">*</span>
+              </label>
+              <div class="input-with-icon">
+                <textarea id="pain_points" name="pain_points" 
+                         class="form-textarea auto-expand" 
+                         placeholder="What specific problems or frustrations do your target customers experience?"></textarea>
+                <span class="tooltip-icon">💡
+                  <span class="tooltip-text">
+                    Be specific about the pain! Describe real problems that keep your customers up at night or waste their time.
+                  </span>
+                </span>
+              </div>
+              <div id="pain_points-count" class="word-counter">0 words (15-250)</div>
+            </div>
+
+            <!-- Alternatives -->
+            <div class="form-group">
+              <label class="form-label">
+                What alternatives exist? <span class="field-required">*</span>
+              </label>
+              <div class="input-with-icon">
+                <textarea id="alternatives" name="alternatives" 
+                         class="form-textarea auto-expand" 
+                         placeholder="What similar products or solutions already exist? How is yours different?"></textarea>
+                <span class="tooltip-icon">💡
+                  <span class="tooltip-text">
+                    Know your competition! List existing solutions and explain why yours is better or different.
+                  </span>
+                </span>
+              </div>
+              <div id="alternatives-count" class="word-counter">0 words (5-200)</div>
+            </div>
+
+            <!-- Category -->
+            <div class="form-group">
+              <label class="form-label">
+                Categories <span class="optional">(Hold CTRL to select multiple)</span>
+              </label>
+              <select id="category" name="category" class="form-select" multiple>
+                <option value="Technology">Technology</option>
+                <option value="Healthcare">Healthcare</option>
+                <option value="Education">Education</option>
+                <option value="Finance">Finance</option>
+                <option value="Entertainment">Entertainment</option>
+                <option value="Food & Beverage">Food & Beverage</option>
+                <option value="Transportation">Transportation</option>
+                <option value="Communication">Communication</option>
+                <option value="Productivity">Productivity</option>
+                <option value="Social Impact">Social Impact</option>
+                <option value="E-commerce">E-commerce</option>
+                <option value="Gaming">Gaming</option>
+                <option value="Travel">Travel</option>
+                <option value="Fitness & Wellness">Fitness & Wellness</option>
+                <option value="Environment">Environment</option>
+                <option value="Other">Other</option>
+              </select>
+            </div>
+
+            <!-- Heard About -->
+            <div class="form-group">
+              <label class="form-label">
+                How did you find us? <span class="optional">(Optional)</span>
+              </label>
+              <select id="heard_about" name="heard_about" class="form-select">
+                <option value="">Select...</option>
+                <option value="Social Media">Social Media</option>
+                <option value="Friend/Family">Friend/Family</option>
+                <option value="Search Engine">Search Engine</option>
+                <option value="News/Blog">News/Blog</option>
+                <option value="Advertisement">Advertisement</option>
+                <option value="Event/Conference">Event/Conference</option>
+                <option value="Other">Other</option>
+              </select>
+            </div>
           </div>
-          <div id="pain_points-count" class="word-counter">0 words (15-250)</div>
-        </div>
 
-        <!-- Alternatives -->
-        <div class="form-group">
-          <label class="form-label" data-ui-key="Required">
-            Alternatives <span class="required">*</span>
-          </label>
-          <div class="input-with-icon" data-tooltip-key="alternatives">
-            <textarea id="alternatives" name="alternatives" 
-                     class="form-textarea" required
-                     placeholder="What similar solutions exist?"></textarea>
-            <span class="tooltip-icon">👁️
-              <span class="tooltip-text">
-                What similar products or solutions already exist? How is yours different?
-              </span>
-            </span>
+          <!-- Draft 2: Market Research Questions -->
+          <div id="draft-2-questions" class="draft-questions hidden">
+            <div class="section-header">
+              <h3>Let's talk market research</h3>
+              <p class="section-subtitle">Time to validate your idea with real data!</p>
+            </div>
+
+            <div class="form-group">
+              <label class="form-label">
+                Did you talk to potential customers? <span class="field-required">*</span>
+              </label>
+              <div class="input-with-icon">
+                <textarea id="market_validation" name="market_validation" 
+                         class="form-textarea auto-expand" 
+                         placeholder="Describe your customer interviews, surveys, or other validation methods. What did you learn?"></textarea>
+                <span class="tooltip-icon">💡
+                  <span class="tooltip-text">
+                    Customer interviews are gold! Describe who you talked to, what questions you asked, and what surprised you.
+                  </span>
+                </span>
+              </div>
+            </div>
+
+            <div class="form-group">
+              <label class="form-label">
+                How deep did you research competitors? <span class="field-required">*</span>
+              </label>
+              <div class="input-with-icon">
+                <textarea id="competitor_research" name="competitor_research" 
+                         class="form-textarea auto-expand" 
+                         placeholder="List competitors you found, their strengths/weaknesses, and how you'll differentiate. Include links if helpful."></textarea>
+                <span class="tooltip-icon">💡
+                  <span class="tooltip-text">
+                    Know thy enemy! List direct and indirect competitors, analyze their pricing, features, and customer reviews.
+                  </span>
+                </span>
+              </div>
+            </div>
+
+            <div class="form-group">
+              <label class="form-label">
+                Did you build an MVP or prototype?
+              </label>
+              <div class="input-with-icon">
+                <textarea id="mvp_development" name="mvp_development" 
+                         class="form-textarea auto-expand" 
+                         placeholder="Describe your MVP/prototype, or explain why you haven't built one yet. No judgment - we want to understand your approach!"></textarea>
+                <span class="tooltip-icon">💡
+                  <span class="tooltip-text">
+                    MVPs can be simple! Even a landing page, mockup, or manual process counts as validation.
+                  </span>
+                </span>
+              </div>
+            </div>
+
+            <div class="form-group">
+              <label class="form-label">
+                Got photos of your product? <span class="optional">(Optional for physical products)</span>
+              </label>
+              <input type="file" id="product_photo" name="product_photo" 
+                     class="form-file" accept="image/*">
+              <div class="file-hint">Upload a photo if you have a physical prototype or mockup</div>
+            </div>
           </div>
-          <div id="alternatives-count" class="word-counter">0 words (5-200)</div>
-        </div>
 
-        <!-- Category (Multi-select) -->
-        <div class="form-group">
-          <label class="form-label" data-tooltip-key="category">
-            Categories <span class="optional"> | Hold CTRL to select multiple categories!</span>
-          </label>
-          <select id="category" name="category" class="form-select" multiple>
-            <option value="Technology">Technology</option>
-            <option value="Healthcare">Healthcare</option>
-            <option value="Education">Education</option>
-            <option value="Finance">Finance</option>
-            <option value="Entertainment">Entertainment</option>
-            <option value="Food & Beverage">Food & Beverage</option>
-            <option value="Transportation">Transportation</option>
-            <option value="Communication">Communication</option>
-            <option value="Productivity">Productivity</option>
-            <option value="Social Impact">Social Impact</option>
-            <option value="E-commerce">E-commerce</option>
-            <option value="Gaming">Gaming</option>
-            <option value="Travel">Travel</option>
-            <option value="Fitness & Wellness">Fitness & Wellness</option>
-            <option value="Environment">Environment</option>
-            <option value="Other">Other</option>
-          </select>
-        </div>
+          <!-- Draft 3: Final Pitch -->
+          <div id="draft-3-questions" class="draft-questions hidden">
+            <div class="section-header">
+              <h3>Final pitch time!</h3>
+              <p class="section-subtitle">Show us you're ready to make this happen</p>
+            </div>
 
-        <!-- Heard About -->
-        <div class="form-group">
-          <label class="form-label" data-tooltip-key="heard_about">
-            How did you hear about Capsera? <span class="optional">(Optional)</span>
-          </label>
-          <select id="heard_about" name="heard_about" class="form-select">
-            <option value="">Select...</option>
-            <option value="Social Media">Social Media</option>
-            <option value="Friend/Family">Friend/Family</option>
-            <option value="Search Engine">Search Engine</option>
-            <option value="News/Blog">News/Blog</option>
-            <option value="Advertisement">Advertisement</option>
-            <option value="Event/Conference">Event/Conference</option>
-            <option value="Other">Other</option>
-          </select>
-        </div>
+            <div class="pitch-example">
+              <h4>💼 Example Investor Pitch:</h4>
+              <div class="example-text">
+                "We're building TaskMaster, a project management tool for small creative agencies. Unlike complex tools like Monday.com, TaskMaster focuses on visual workflows that designers actually want to use. We've interviewed 50+ agency owners who spend 2+ hours daily on project coordination. Our beta has 200 users with 40% weekly retention. Seeking $50K to hire a developer and reach 1000+ users in 6 months."
+              </div>
+            </div>
 
-        <button type="submit" class="btn btn-primary" data-ui-key="Submit">
-          Submit Idea
-        </button>
-      </form>
+            <div class="form-group">
+              <label class="form-label">
+                Your investor pitch <span class="field-required">*</span>
+              </label>
+              <div class="input-with-icon">
+                <textarea id="investor_pitch" name="investor_pitch" 
+                         class="form-textarea auto-expand" 
+                         placeholder="Write your 30-second elevator pitch. What's the opportunity, your solution, early traction, and what you need?"></textarea>
+                <span class="tooltip-icon">💡
+                  <span class="tooltip-text">
+                    Make it punchy! Problem → Solution → Traction → Ask. Keep it under 100 words but pack in the key details.
+                  </span>
+                </span>
+              </div>
+            </div>
+
+            <div class="form-group">
+              <label class="form-label">
+                What research have you done since last time?
+              </label>
+              <div class="input-with-icon">
+                <textarea id="additional_research" name="additional_research" 
+                         class="form-textarea auto-expand" 
+                         placeholder="Describe any additional customer interviews, market analysis, or validation work you've completed."></textarea>
+                <span class="tooltip-icon">💡
+                  <span class="tooltip-text">
+                    Show your progress! We love seeing continuous learning and iteration based on customer feedback.
+                  </span>
+                </span>
+              </div>
+            </div>
+
+            <div class="form-group">
+              <label class="form-label">
+                MVP or demo link <span class="optional">(Optional)</span>
+              </label>
+              <input type="url" id="mvp_link" name="mvp_link" 
+                     class="form-input" 
+                     placeholder="https://your-demo.com">
+              <div class="file-hint">Share a link to your working prototype, demo, or landing page</div>
+            </div>
+          </div>
+
+          <button type="submit" class="btn btn-primary" id="submit-button">
+            Submit Draft 1
+          </button>
+        </form>
+      </div>
     </div>
 
     <!-- Screen 4: Settings -->
@@ -207,8 +375,9 @@
     </div>
   </div>
 
-  <!-- Modal Overlay Template (Created dynamically) -->
+  <!-- Modal Overlay Template -->
   <style>
+    /* Enhanced modal and compact styles */
     .modal-overlay {
       position: fixed;
       top: 0;
@@ -224,10 +393,10 @@
 
     .modal-content {
       background: white;
-      padding: 4%;
+      padding: 3%;
       border-radius: 8px;
-      max-width: 90%;
-      max-height: 90%;
+      max-width: 85%;
+      max-height: 85%;
       overflow-y: auto;
       position: relative;
     }
@@ -236,8 +405,8 @@
       display: flex;
       justify-content: space-between;
       align-items: center;
-      margin-bottom: 3%;
-      padding-bottom: 2%;
+      margin-bottom: 2%;
+      padding-bottom: 1%;
       border-bottom: 1px solid var(--capsera-border);
     }
 
@@ -257,129 +426,18 @@
     .modal-body {
       line-height: 1.6;
     }
-
-    .idea-details h4 {
-      color: var(--capsera-deep);
-      margin-top: 3%;
-      margin-bottom: 1%;
-    }
-
-    .idea-details p {
-      margin-bottom: 2%;
-    }
-
-    .feedback-section {
-      margin-top: 6%;
-      padding-top: 4%;
-      border-top: 2px solid var(--capsera-border);
-    }
-
-    .feedback-section h3 {
-      color: var(--capsera-deep);
-      margin-bottom: 3%;
-    }
-
-    .projects-overview {
-      margin-bottom: 4%;
-      background: var(--capsera-light-gray);
-      padding: 3%;
-      border-radius: 4px;
-    }
-
-    .project-overview {
-      background: white;
-      padding: 2%;
-      margin-bottom: 2%;
-      border-radius: 4px;
-      border-left: 4px solid var(--capsera-accent);
-    }
-
-    .project-header {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      margin-bottom: 1%;
-    }
-
-    .project-preview {
-      font-size: 0.9rem;
-      color: #666;
-    }
-
-    .status {
-      padding: 1% 2%;
-      border-radius: 12px;
-      font-size: 0.8rem;
-      font-weight: 500;
-    }
-
-    .status.success {
-      background: #e6ffe6;
-      color: var(--capsera-success);
-    }
-
-    .status.warning {
-      background: #fff7e6;
-      color: #856404;
-    }
-
-    .user-project-selection {
-      background: var(--capsera-light-gray);
-      padding: 4%;
-      border-radius: 8px;
-      margin-bottom: 4%;
-    }
-
-    .required {
-      color: var(--capsera-error);
-    }
-
-    .optional {
-      color: #666;
-      font-weight: normal;
-      font-size: 0.9rem;
-    }
-
-    .settings-section {
-      margin-bottom: 6%;
-    }
-
-    .settings-section h3 {
-      color: var(--capsera-deep);
-      margin-bottom: 3%;
-    }
-
-    @media (min-width: 768px) {
-      .modal-content {
-        max-width: 70%;
-        padding: 3%;
-      }
-      
-      .user-project-selection {
-        display: grid;
-        grid-template-columns: 1fr 1fr;
-        gap: 4%;
-      }
-    }
-
-    @media (min-width: 1024px) {
-      .modal-content {
-        max-width: 60%;
-      }
-    }
   </style>
 
-  <!-- Scripts: Load public environment config first -->
+  <!-- Scripts -->
   <script>
-    // Public environment configuration - loaded directly in HTML for immediate availability
-    // Only contains keys that are safe to expose in the browser
     window.ENV = {
-      SUPABASE_URL: "https://cboescovlebokpnrsnwp.supabase.co", // Replace with your actual URL
-      SUPABASE_ANON_KEY: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNib2VzY292bGVib2twbnJzbndwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTUxMjc0ODAsImV4cCI6MjA3MDcwMzQ4MH0.2mrbRIp7A14hRs_mz37sPshZOrmt0uT9UsM0JWRSvx0", // Replace with your actual anon key
-      EUREKA: true, // Feature flag
-      EDGE_FUNCTION_URL: "https://cboescovlebokpnrsnwp.supabase.co/functions/v1", // Replace with your actual edge function URL
+      SUPABASE_URL: "https://cboescovlebokpnrsnwp.supabase.co",
+      SUPABASE_ANON_KEY: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNib2VzY292bGVib2twbnJzbndwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTUxMjc0ODAsImV4cCI6MjA3MDcwMzQ4MH0.2mrbRIp7A14hRs_mz37sPshZOrmt0uT9UsM0JWRSvx0",
+      EUREKA: true,
+      EDGE_FUNCTION_URL: "https://cboescovlebokpnrsnwp.supabase.co/functions/v1",
+      DRAFT_COOLDOWN_DAYS: 7 // Configurable cooldown period
     };
-
-    console.log("Public environment configuration loaded");
   </script>
   <script type="module" src="app.js"></script>
+</body>
+</html>
