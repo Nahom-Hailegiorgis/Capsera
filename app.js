@@ -1,4 +1,4 @@
-// Fixed version of app.js - Enhanced Capsera PWA with offline capabilities and version checking 
+// app.js - Main Capsera PWA application
 import { dbHelper } from "./db.js";
 import { supabaseHelper } from "./supabase.js";
 import { validation } from "./validation.js";
@@ -9,39 +9,36 @@ class CapseraApp {
     this.currentScreen = "ideas";
     this.currentUser = null;
     this.currentProject = null;
-    this.currentUserId = null;
-    this.projects = [];
     this.currentLanguage = "en";
     this.translations = null;
     this.ideas = [];
     this.isOnline = navigator.onLine;
-    this.currentDraftNumber = 1;
-    this.expandedSubmissions = new Set();
-    this.offlineBanner = null;
-    this.lastKnownVersion = null;
 
     this.init();
   }
 
   async init() {
+    // Set up event listeners
     this.setupEventListeners();
+
+    // Register service worker
     await this.registerServiceWorker();
+
+    // Initialize translations
     this.translations = await translator.init();
+
+    // Load initial data
     await this.loadIdeasScreen();
+
+    // Show initial screen
     this.showScreen("ideas");
-    
-    // Check for app version updates
-    await this.checkForAppUpdates();
-    
+
     // Set up periodic sync
-    setInterval(() => this.syncOfflineData(), 30000);
-    this.syncOfflineProjects();
-    
-    // Initialize offline banner
-    this.updateOfflineStatus();
+    setInterval(() => this.syncOfflineData(), 30000); // Every 30 seconds
   }
 
   setupEventListeners() {
+    // Wait for DOM to be ready before setting up listeners
     if (document.readyState === "loading") {
       document.addEventListener("DOMContentLoaded", () => {
         this.setupDOMEventListeners();
@@ -53,258 +50,23 @@ class CapseraApp {
     // Online/offline detection
     window.addEventListener("online", () => {
       this.isOnline = true;
-      this.updateOfflineStatus();
       this.syncOfflineData();
-      this.syncOfflineProjects();
-      this.showMessage(this.t("Connection restored - syncing data..."), "success");
+      this.showMessage("Connection restored", "success");
     });
 
     window.addEventListener("offline", () => {
       this.isOnline = false;
-      this.updateOfflineStatus();
-      this.showMessage(this.t("Working offline - drafts will be saved locally"), "warning");
+      this.showMessage("Working offline", "warning");
     });
 
     // Service worker messages
     if ("serviceWorker" in navigator && navigator.serviceWorker) {
       navigator.serviceWorker.addEventListener("message", (event) => {
-        this.handleServiceWorkerMessage(event.data);
-      });
-    }
-
-    // Before unload - save current form data as draft
-    window.addEventListener("beforeunload", () => {
-      this.saveCurrentFormAsDraft();
-    });
-  }
-
-  // Handle service worker messages
-  handleServiceWorkerMessage(data) {
-    switch (data.type) {
-      case 'NEW_VERSION_AVAILABLE':
-        this.handleNewVersionAvailable(data.version);
-        break;
-      case 'SYNC_OFFLINE_DATA':
-        this.syncOfflineData();
-        this.syncOfflineProjects();
-        break;
-      default:
-        console.log('Unknown SW message:', data);
-    }
-  }
-
-  // Handle new version available
-  async handleNewVersionAvailable(newVersion) {
-    if (this.lastKnownVersion && this.lastKnownVersion !== newVersion) {
-      const shouldReload = confirm(
-        this.t("A new version of Capsera is available. Reload to update?")
-      );
-      
-      if (shouldReload) {
-        // Save current form data before reloading
-        await this.saveCurrentFormAsDraft();
-        window.location.reload();
-      }
-    }
-    this.lastKnownVersion = newVersion;
-  }
-
-  // Check for app updates by comparing manifest version
-  async checkForAppUpdates() {
-    try {
-      // Get current version from manifest
-      const response = await fetch('/manifest.json', { cache: 'no-store' });
-      const manifest = await response.json();
-      const currentVersion = manifest.version;
-      
-      // Get stored version
-      const storedVersion = await dbHelper.getSetting('app_version');
-      
-      if (storedVersion && storedVersion !== currentVersion) {
-        console.log(`App updated from ${storedVersion} to ${currentVersion}`);
-        this.showMessage(this.t("App updated to latest version!"), "success");
-      }
-      
-      // Store current version
-      await dbHelper.saveSetting('app_version', currentVersion);
-      this.lastKnownVersion = currentVersion;
-      
-    } catch (error) {
-      console.error('Version check failed:', error);
-    }
-  }
-
-  // Update offline status banner
-  updateOfflineStatus() {
-    if (!this.isOnline) {
-      this.showOfflineBanner();
-    } else {
-      this.hideOfflineBanner();
-    }
-  }
-
-  showOfflineBanner() {
-    if (this.offlineBanner) return;
-    
-    this.offlineBanner = document.createElement('div');
-    this.offlineBanner.className = 'offline-banner';
-    this.offlineBanner.innerHTML = `
-      <div class="offline-content">
-        📡 ${this.t("You are offline — drafts saved locally")}
-        <button onclick="app.hideOfflineBanner()" class="offline-dismiss">×</button>
-      </div>
-    `;
-    this.offlineBanner.style.cssText = `
-      position: fixed; top: 0; left: 0; right: 0; z-index: 1000;
-      background: #ffc107; color: #212529; padding: 10px;
-      text-align: center; font-weight: 500;
-      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-      animation: slideDown 0.3s ease;
-    `;
-    
-    document.body.insertBefore(this.offlineBanner, document.body.firstChild);
-    
-    // Adjust content padding to account for banner
-    document.body.style.paddingTop = '50px';
-  }
-
-  hideOfflineBanner() {
-    if (this.offlineBanner) {
-      this.offlineBanner.remove();
-      this.offlineBanner = null;
-      document.body.style.paddingTop = '0';
-    }
-  }
-
-  // Save current form data as draft
-  async saveCurrentFormAsDraft() {
-    if (this.currentScreen !== 'submit' || !this.currentUser || !this.currentProject) {
-      return;
-    }
-
-    try {
-      const form = document.getElementById("submit-form");
-      if (!form) return;
-
-      const formData = new FormData(form);
-      const categorySelect = document.getElementById("category");
-      const selectedCategories = Array.from(categorySelect?.selectedOptions || []).map(option => option.value);
-
-      // Check if form has any meaningful content
-      const hasContent = formData.get("ideal_customer_profile") || 
-                        formData.get("product_idea") || 
-                        formData.get("pain_points") || 
-                        formData.get("alternatives");
-
-      if (!hasContent) return;
-
-      const draftData = {
-        device_id: dbHelper.getDeviceId(),
-        full_name: this.currentUser,
-        user_id: this.currentUserId,
-        project_name: this.currentProject,
-        ideal_customer_profile: formData.get("ideal_customer_profile") || "",
-        product_idea: formData.get("product_idea") || "",
-        pain_points: formData.get("pain_points") || "",
-        alternatives: formData.get("alternatives") || "",
-        category: selectedCategories,
-        heard_about: formData.get("heard_about") || "",
-        market_validation: formData.get("market_validation") || "",
-        competitor_research: formData.get("competitor_research") || "",
-        mvp_development: formData.get("mvp_development") || "",
-        investor_pitch: formData.get("investor_pitch") || "",
-        additional_research: formData.get("additional_research") || "",
-        mvp_link: formData.get("mvp_link") || "",
-        version: 0, // Version 0 indicates auto-saved draft
-        is_final: false,
-        needs_sync: !this.isOnline,
-        auto_saved: true,
-        saved_at: new Date().toISOString()
-      };
-
-      await dbHelper.saveDraft(draftData);
-      console.log('Auto-saved draft for', this.currentUser, this.currentProject);
-      
-    } catch (error) {
-      console.error('Failed to auto-save draft:', error);
-    }
-  }
-
-  // Restore auto-saved draft
-  async restoreAutoSavedDraft() {
-    if (!this.currentUser || !this.currentProject) return;
-
-    try {
-      const drafts = await dbHelper.getDraftsByUserAndProject(this.currentUser, this.currentProject);
-      const autoSaved = drafts.find(d => d.auto_saved && d.version === 0);
-      
-      if (!autoSaved) return;
-
-      const shouldRestore = confirm(
-        this.t("We found an auto-saved draft. Would you like to restore it?")
-      );
-      
-      if (!shouldRestore) {
-        // Delete the auto-saved draft if user doesn't want it
-        await dbHelper.deleteDraft(autoSaved.id);
-        return;
-      }
-
-      this.populateFormWithDraft(autoSaved);
-      this.showMessage(this.t("Draft restored successfully!"), "success");
-      
-      // Delete the auto-saved draft after restoring
-      await dbHelper.deleteDraft(autoSaved.id);
-      
-    } catch (error) {
-      console.error('Failed to restore auto-saved draft:', error);
-    }
-  }
-
-  // Populate form with draft data
-  populateFormWithDraft(draft) {
-    const form = document.getElementById("submit-form");
-    if (!form) return;
-
-    // Fill text inputs
-    const textFields = [
-      'ideal_customer_profile', 'product_idea', 'pain_points', 'alternatives',
-      'market_validation', 'competitor_research', 'mvp_development', 
-      'investor_pitch', 'additional_research', 'mvp_link', 'heard_about'
-    ];
-
-    textFields.forEach(fieldName => {
-      const field = document.getElementById(fieldName);
-      if (field && draft[fieldName]) {
-        field.value = draft[fieldName];
-        if (field.classList.contains('auto-expand')) {
-          this.autoExpandTextarea(field);
+        if (event.data.type === "SYNC_OFFLINE_DATA") {
+          this.syncOfflineData();
         }
-      }
-    });
-
-    // Fill category selection
-    const categorySelect = document.getElementById("category");
-    if (categorySelect && draft.category) {
-      Array.from(categorySelect.options).forEach(option => {
-        option.selected = draft.category.includes(option.value);
       });
     }
-
-    this.updateWordCounts();
-  }
-
-  // Translation helper method
-  t(key) {
-    if (!this.translations || !this.translations.ui) {
-      return key;
-    }
-    const translated = this.translations.ui[key];
-    if (!translated) {
-      console.warn(`🌐 Missing translation for "${key}"`);
-      return key;
-    }
-    return translated;
   }
 
   setupDOMEventListeners() {
@@ -312,41 +74,14 @@ class CapseraApp {
     document.querySelectorAll(".nav-tab").forEach((tab) => {
       tab.addEventListener("click", (e) => {
         e.preventDefault();
-        const screen = e.target.getAttribute("data-screen") ||
+        const screen =
+          e.target.getAttribute("data-screen") ||
           e.target.closest("[data-screen]")?.getAttribute("data-screen");
         if (screen) {
           this.showScreen(screen);
         }
       });
     });
-
-    // Dynamic textarea auto-expand
-    document.addEventListener("input", (e) => {
-      if (e.target.classList.contains("auto-expand")) {
-        this.autoExpandTextarea(e.target);
-      }
-    });
-
-    // Auto-save form data while typing (debounced)
-    let autoSaveTimeout;
-    document.addEventListener("input", (e) => {
-      if (e.target.closest("#submit-form")) {
-        clearTimeout(autoSaveTimeout);
-        autoSaveTimeout = setTimeout(() => {
-          this.saveCurrentFormAsDraft();
-        }, 2000); // Auto-save after 2 seconds of inactivity
-      }
-    });
-  }
-
-  // Auto-expand textarea functionality
-  autoExpandTextarea(textarea) {
-    textarea.style.height = "auto";
-    textarea.style.height = textarea.scrollHeight + "px";
-    
-    if (textarea.scrollHeight < 60) {
-      textarea.style.height = "60px";
-    }
   }
 
   async registerServiceWorker() {
@@ -354,17 +89,6 @@ class CapseraApp {
       try {
         const registration = await navigator.serviceWorker.register("/sw.js");
         console.log("SW registered:", registration);
-        
-        // Check for updates
-        registration.addEventListener('updatefound', () => {
-          const newWorker = registration.installing;
-          newWorker.addEventListener('statechange', () => {
-            if (newWorker.state === 'activated') {
-              console.log('New SW activated');
-            }
-          });
-        });
-        
       } catch (error) {
         console.error("SW registration failed:", error);
       }
@@ -372,11 +96,6 @@ class CapseraApp {
   }
 
   showScreen(screenName) {
-    // Save current form data before switching screens
-    if (this.currentScreen === 'submit') {
-      this.saveCurrentFormAsDraft();
-    }
-
     // Hide all screens
     document.querySelectorAll(".screen").forEach((screen) => {
       screen.classList.remove("active");
@@ -422,9 +141,10 @@ class CapseraApp {
     const container = document.getElementById("ideas-list");
     if (!container) return;
 
-    container.innerHTML = `<div class="loading">${this.t("Loading ideas...")}</div>`;
+    container.innerHTML = '<div class="loading">Loading ideas...</div>';
 
     try {
+      // Try to get fresh data if online, otherwise use cache
       if (this.isOnline) {
         this.ideas = await supabaseHelper.getPublicIdeas();
         await dbHelper.cacheIdeas(this.ideas);
@@ -437,17 +157,7 @@ class CapseraApp {
       this.setupFeedbackForm();
     } catch (error) {
       console.error("Error loading ideas:", error);
-      
-      // Try to load from cache on error
-      try {
-        const cached = await dbHelper.getCachedIdeas();
-        this.ideas = cached || [];
-        this.renderIdeasList();
-        this.setupFeedbackForm();
-        this.showMessage(this.t("Loaded cached ideas (offline mode)"), "warning");
-      } catch (cacheError) {
-        container.innerHTML = '<div class="error">Failed to load ideas</div>';
-      }
+      container.innerHTML = '<div class="error">Failed to load ideas</div>';
     }
   }
 
@@ -456,25 +166,29 @@ class CapseraApp {
     if (!container) return;
 
     if (this.ideas.length === 0) {
-      const message = this.isOnline ? 
-        this.t("No ideas found") : 
-        this.t("No cached ideas available offline");
-      container.innerHTML = `<div class="text-center">${message}</div>`;
+      container.innerHTML = '<div class="text-center">No ideas found</div>';
       return;
     }
 
     const html = this.ideas
-      .map((idea) => `
-        <div class="idea-item" onclick="app.viewIdeaDetails('${idea.id}')">
-          <div class="idea-title">${this.escapeHtml(idea.preview || "Untitled Idea")}</div>
-          <div class="idea-meta">
-            By ${this.escapeHtml(idea.full_name)} • ${
-              Array.isArray(idea.category) ? idea.category.join(", ") : idea.category || "Uncategorized"
-            } • 
-            ${new Date(idea.created_at).toLocaleDateString()}
-          </div>
+      .map(
+        (idea) => `
+      <div class="idea-item" onclick="app.viewIdeaDetails('${idea.id}')">
+        <div class="idea-title">${this.escapeHtml(
+          idea.preview || "Untitled Idea"
+        )}</div>
+        <div class="idea-meta">
+          By ${this.escapeHtml(idea.full_name)} • ${
+          Array.isArray(idea.category)
+            ? idea.category.join(", ")
+            : idea.category || "Uncategorized"
+        } • 
+          ${new Date(idea.created_at).toLocaleDateString()}
         </div>
-      `).join("");
+      </div>
+    `
+      )
+      .join("");
 
     container.innerHTML = html + this.getFeedbackFormHTML();
   }
@@ -482,100 +196,133 @@ class CapseraApp {
   getFeedbackFormHTML() {
     return `
       <div class="feedback-section">
-        <h3>${this.t("Share Your Feedback")}</h3>
+        <h3>Share Your Feedback</h3>
         <form id="feedback-form" class="feedback-form">
           <div class="form-group">
-            <label class="form-label">${this.t("How can we improve Capsera?")}</label>
-            <textarea id="feedback-message" class="form-textarea auto-expand" 
-                     placeholder="${this.t("Tell us what you think...")}"></textarea>
+            <label class="form-label">How can we improve Capsera?</label>
+            <textarea id="feedback-message" class="form-textarea" 
+                     placeholder="Tell us what you think..." required></textarea>
           </div>
           <div class="form-group">
-            <label class="form-label">${this.t("Contact (Optional)")}</label>
+            <label class="form-label">Contact (Optional)</label>
             <input type="text" id="feedback-contact" class="form-input" 
-                   placeholder="${this.t("Email or phone (optional)")}">
+                   placeholder="Email or phone (optional)">
           </div>
-          <button type="submit" class="btn btn-primary" ${!this.isOnline ? 'disabled' : ''}>
-            ${this.t("Submit Feedback")}${!this.isOnline ? ` (${this.t("Offline")})` : ''}
-          </button>
+          <button type="submit" class="btn btn-primary">Submit Feedback</button>
         </form>
       </div>
     `;
   }
 
-  setupFeedbackForm() {
-    const trySetupForm = () => {
-      const form = document.getElementById("feedback-form");
-      if (!form) return false;
+setupFeedbackForm() {
+  console.log("🔧 FEEDBACK: Setting up feedback form");
 
-      const newForm = form.cloneNode(true);
-      form.parentNode.replaceChild(newForm, form);
+  // Use a small delay to ensure DOM has updated after innerHTML changes
+  const trySetupForm = () => {
+    const form = document.getElementById("feedback-form");
+    if (!form) {
+      console.error("🔧 FEEDBACK: Form element not found!");
+      return false;
+    }
 
-      newForm.addEventListener("submit", async (e) => {
-        e.preventDefault();
+    // Remove existing listeners to avoid duplicates
+    const newForm = form.cloneNode(true);
+    form.parentNode.replaceChild(newForm, form);
+    console.log("🔧 FEEDBACK: Form listener attached successfully");
 
-        if (!this.isOnline) {
-          this.showMessage(this.t("Feedback submission requires internet connection"), "error");
-          return;
-        }
+    newForm.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      console.log("🔧 FEEDBACK: Form submission started");
 
-        const messageInput = newForm.querySelector("#feedback-message");
-        const contactInput = newForm.querySelector("#feedback-contact");
-        const submitButton = newForm.querySelector('button[type="submit"]');
+      // Re-query elements from the new form to ensure they exist
+      const messageInput = newForm.querySelector("#feedback-message");
+      const contactInput = newForm.querySelector("#feedback-contact");
+      const submitButton = newForm.querySelector('button[type="submit"]');
 
-        const message = messageInput?.value?.trim();
-        const contact = contactInput?.value?.trim();
+      const message = messageInput?.value?.trim();
+      const contact = contactInput?.value?.trim();
 
-        if (!message) {
-          this.showMessage(this.t("Please enter your feedback message"), "error");
-          return;
-        }
-
-        const originalText = submitButton?.textContent || this.t("Submit Feedback");
-        if (submitButton) {
-          submitButton.textContent = this.t("Submitting...");
-          submitButton.disabled = true;
-        }
-
-        try {
-          const feedbackData = {
-            device_id: dbHelper.getDeviceId(),
-            message: message,
-            contact_info: contact || null,
-            anonymous: !contact,
-          };
-
-          // FIXED: Store locally first for offline support with proper validation
-          await dbHelper.saveFeedback(feedbackData);
-          
-          if (this.isOnline) {
-            // TODO: await supabaseHelper.submitFeedback(feedbackData);
-            this.showMessage(this.t("Thank you for your feedback!"), "success");
-          } else {
-            this.showMessage(this.t("Feedback saved locally, will sync when online"), "warning");
-          }
-          
-          newForm.reset();
-        } catch (error) {
-          console.error("Feedback submission failed:", error);
-          this.showMessage(this.t("Failed to submit feedback. Please try again."), "error");
-        } finally {
-          if (submitButton) {
-            submitButton.textContent = originalText;
-            submitButton.disabled = false;
-          }
-        }
+      console.log("🔧 FEEDBACK: Form data", {
+        messageLength: message?.length || 0,
+        hasContact: !!contact,
       });
 
-      return true;
-    };
-
-    if (trySetupForm()) return;
-    setTimeout(() => {
-      if (!trySetupForm()) {
-        setTimeout(() => trySetupForm(), 100);
+      if (!message) {
+        this.showMessage("Please enter your feedback message", "error");
+        return;
       }
-    }, 10);
+
+      // Show loading state
+      const originalText = submitButton?.textContent || "Submit Feedback";
+      if (submitButton) {
+        submitButton.textContent = "Submitting...";
+        submitButton.disabled = true;
+      }
+
+      try {
+        // Prepare feedback data
+        const feedbackData = {
+          device_id: dbHelper.getDeviceId(),
+          message: message,
+          contact_info: contact || null,
+          anonymous: !contact,
+        };
+
+        console.log("🔧 FEEDBACK: Submitting to Supabase", {
+          device_id: feedbackData.device_id,
+          message_length: feedbackData.message.length,
+          anonymous: feedbackData.anonymous,
+        });
+
+        // Submit directly to Supabase
+        const result = await supabaseHelper.submitFeedback(feedbackData);
+
+        console.log("🔧 FEEDBACK: Success!", {
+          id: result.id,
+          created_at: result.created_at,
+        });
+
+        this.showMessage("Thank you for your feedback!", "success");
+        newForm.reset();
+      } catch (error) {
+        console.error("🔧 FEEDBACK: Failed:", error);
+
+        // Show user-friendly error message
+        let errorMessage = "Failed to submit feedback. Please try again.";
+        if (error.message.includes("policy")) {
+          errorMessage = "Permission error - please contact support.";
+        } else if (error.message.includes("network")) {
+          errorMessage = "Network error - check your connection.";
+        }
+
+        this.showMessage(errorMessage, "error");
+      } finally {
+        // Reset button
+        if (submitButton) {
+          submitButton.textContent = originalText;
+          submitButton.disabled = false;
+        }
+      }
+    });
+
+    return true; // Success
+  };
+
+  // Try immediately first
+  if (trySetupForm()) {
+    return;
   }
+
+  // If form not found, try again after a short delay to allow DOM to update
+  setTimeout(() => {
+    if (!trySetupForm()) {
+      // If still not found after delay, try once more with a longer delay
+      setTimeout(() => {
+        trySetupForm();
+      }, 100);
+    }
+  }, 10);
+}
 
   async viewIdeaDetails(ideaId) {
     const modal = document.createElement("div");
@@ -583,11 +330,11 @@ class CapseraApp {
     modal.innerHTML = `
       <div class="modal-content">
         <div class="modal-header">
-          <h3>${this.t("Idea Details")}</h3>
+          <h3>Idea Details</h3>
           <button onclick="this.closest('.modal-overlay').remove()">×</button>
         </div>
         <div class="modal-body">
-          <div class="loading">${this.t("Loading details...")}</div>
+          <div class="loading">Loading details...</div>
         </div>
       </div>
     `;
@@ -595,41 +342,41 @@ class CapseraApp {
     document.body.appendChild(modal);
 
     try {
-      // TODO: Call supabaseHelper.getIdeaDetails(ideaId)
-      const result = { 
-        restricted: true, 
-        message: this.isOnline ? 
-          this.t("Detailed view coming soon!") : 
-          this.t("Detailed view requires internet connection")
-      };
+      const result = await supabaseHelper.getIdeaDetails(ideaId);
 
       const modalBody = modal.querySelector(".modal-body");
 
       if (result.restricted) {
         modalBody.innerHTML = `
           <div class="text-center">
-            <p>${result.message || this.t("Detailed view is not available at this time.")}</p>
+            <p>${
+              result.message || "Detailed view is not available at this time."
+            }</p>
           </div>
         `;
       } else {
         const idea = result.data;
         modalBody.innerHTML = `
           <div class="idea-details">
-            <h4>${this.t("Customer Profile")}</h4>
+            <h4>Customer Profile</h4>
             <p>${this.escapeHtml(idea.ideal_customer_profile)}</p>
             
-            <h4>${this.t("Product Idea")}</h4>
+            <h4>Product Idea</h4>
             <p>${this.escapeHtml(idea.product_idea)}</p>
             
-            <h4>${this.t("Pain Points")}</h4>
+            <h4>Pain Points</h4>
             <p>${this.escapeHtml(idea.pain_points)}</p>
             
-            <h4>${this.t("Alternatives")}</h4>
+            <h4>Alternatives</h4>
             <p>${this.escapeHtml(idea.alternatives)}</p>
             
             <div class="idea-meta">
-              ${this.t("Categories")}: ${Array.isArray(idea.category) ? idea.category.join(", ") : idea.category || "None"} • 
-              ${this.t("Quality Score")}: ${idea.quality_score}/100
+              Categories: ${
+                Array.isArray(idea.category)
+                  ? idea.category.join(", ")
+                  : idea.category || "None"
+              } • 
+              Quality Score: ${idea.quality_score}/100
             </div>
             
             ${this.renderAIFeedback(idea.ai_feedback)}
@@ -642,23 +389,36 @@ class CapseraApp {
     }
   }
 
-  // Screen 2: My Submissions - Now with scroll frames for drafts
+  // Screen 2: My Submissions - Fixed duplicates and improved project display
   async loadSubmissionsScreen() {
     const container = document.getElementById("submissions-list");
     if (!container) return;
 
-    container.innerHTML = `<div class="loading">${this.t("Loading submissions...")}</div>`;
+    container.innerHTML = '<div class="loading">Loading submissions...</div>';
 
     const drafts = await dbHelper.getAllDrafts();
 
     if (drafts.length === 0) {
-      container.innerHTML = `<div class="text-center">${this.t("No submissions yet")}</div>`;
+      container.innerHTML = '<div class="text-center">No submissions yet</div>';
       return;
     }
 
-    // Group by user and project
-    const userGroups = {};
+    // Deduplicate by creating unique key per submission
+    const uniqueDrafts = {};
     drafts.forEach((draft) => {
+      const key = `${draft.full_name}-${draft.project_name || "Default"}-v${
+        draft.version
+      }`;
+      if (!uniqueDrafts[key] || draft.saved_at > uniqueDrafts[key].saved_at) {
+        uniqueDrafts[key] = draft;
+      }
+    });
+
+    const dedupedDrafts = Object.values(uniqueDrafts);
+
+    // Group by user, then by project
+    const userGroups = {};
+    dedupedDrafts.forEach((draft) => {
       if (!userGroups[draft.full_name]) {
         userGroups[draft.full_name] = {};
       }
@@ -672,31 +432,66 @@ class CapseraApp {
     let html = "";
     Object.entries(userGroups).forEach(([userName, userProjects]) => {
       html += `
-        <div class="user-section-compact">
-          <div class="user-header-compact">${this.escapeHtml(userName)}</div>
-          ${Object.entries(userProjects)
-            .map(([projectName, projectDrafts]) => {
-              const latestDraft = projectDrafts.sort((a, b) => b.version - a.version)[0];
-              const submissionId = `${userName}-${projectName}`;
-              const isExpanded = this.expandedSubmissions.has(submissionId);
-              
-              return `
-                <div class="submission-compact">
-                  <div class="submission-header-compact" onclick="app.toggleSubmissionDetails('${submissionId}')">
-                    <div class="submission-summary">
-                      <div class="submission-title">${this.escapeHtml(projectName)}</div>
-                      <div class="submission-preview">${this.escapeHtml((latestDraft.product_idea || "").substring(0, 80))}${latestDraft.product_idea && latestDraft.product_idea.length > 80 ? "..." : ""}</div>
-                    </div>
-                    <div class="expand-arrow ${isExpanded ? "expanded" : ""}">${isExpanded ? "▼" : "▶"}</div>
+        <div class="user-section">
+          <div class="user-header">${this.escapeHtml(userName)}</div>
+          <div class="projects-overview">
+            <h4>Projects Summary</h4>
+            ${Object.entries(userProjects)
+              .map(([projectName, projectDrafts]) => {
+                const finalDraft = projectDrafts.find((d) => d.is_final);
+                const maxVersion = Math.max(
+                  ...projectDrafts.map((d) => d.version)
+                );
+                const status = finalDraft
+                  ? "Final Submitted"
+                  : `Draft v${maxVersion}/3`;
+                const statusClass = finalDraft ? "success" : "warning";
+
+                return `
+                <div class="project-overview">
+                  <div class="project-header">
+                    <strong>${this.escapeHtml(projectName)}</strong>
+                    <span class="status ${statusClass}">${status}</span>
                   </div>
-                  <div class="submission-details ${isExpanded ? "expanded" : ""}" id="details-${submissionId}">
-                    <div class="drafts-scroll-frame">
-                      ${projectDrafts.map(draft => this.renderSubmissionItem(draft, projectName)).join("")}
-                    </div>
+                  <div class="project-meta">
+                    ${projectDrafts.length} attempt${
+                  projectDrafts.length !== 1 ? "s" : ""
+                } • 
+                    Last updated: ${new Date(
+                      Math.max(
+                        ...projectDrafts.map((d) => new Date(d.saved_at))
+                      )
+                    ).toLocaleDateString()}
+                  </div>
+                  <div class="project-preview">
+                    ${this.escapeHtml(
+                      (
+                        projectDrafts.sort((a, b) => b.version - a.version)[0]
+                          .product_idea || ""
+                      ).substring(0, 100)
+                    )}${
+                  projectDrafts[0].product_idea &&
+                  projectDrafts[0].product_idea.length > 100
+                    ? "..."
+                    : ""
+                }
                   </div>
                 </div>
               `;
-            }).join("")}
+              })
+              .join("")}
+          </div>
+          <div class="user-submissions">
+            <h4>All Submissions</h4>
+            ${Object.entries(userProjects)
+              .map(([projectName, projectDrafts]) =>
+                projectDrafts
+                  .sort((a, b) => b.version - a.version)
+                  .map((draft) => this.renderSubmissionItem(draft, projectName))
+                  .join("")
+              )
+              .join("")}
+          </div>
         </div>
       `;
     });
@@ -704,148 +499,129 @@ class CapseraApp {
     container.innerHTML = html;
   }
 
-  toggleSubmissionDetails(submissionId) {
-    const detailsElement = document.getElementById(`details-${submissionId}`);
-    const arrowElement = document.querySelector(`[onclick="app.toggleSubmissionDetails('${submissionId}')"] .expand-arrow`);
-    
-    if (this.expandedSubmissions.has(submissionId)) {
-      this.expandedSubmissions.delete(submissionId);
-      detailsElement.classList.remove("expanded");
-      arrowElement.classList.remove("expanded");
-      arrowElement.textContent = "▶";
-    } else {
-      this.expandedSubmissions.add(submissionId);
-      detailsElement.classList.add("expanded");
-      arrowElement.classList.add("expanded");
-      arrowElement.textContent = "▼";
-    }
-  }
-
   renderSubmissionItem(draft, projectName) {
-    const statusText = draft.is_final ? this.t("Final Submission") : `${this.t("Draft")} v${draft.version}`;
+    const statusText = draft.is_final
+      ? "Final Submission"
+      : `Draft v${draft.version}`;
     const statusClass = draft.is_final ? "success" : "warning";
-    const aiScore = draft.ai_feedback?.overall_score || draft.ai_feedback?.score;
-    const syncStatus = draft.needs_sync ? " (offline)" : "";
+
+    // Handle both old and new AI feedback formats for display
+    const aiScore =
+      draft.ai_feedback?.overall_score || draft.ai_feedback?.score;
 
     return `
-      <div class="submission-item-compact">
-        <div class="submission-meta-compact">
-          <span class="status ${statusClass}">${statusText}${syncStatus}</span>
-          <span class="submission-date">${new Date(draft.saved_at || draft.created_at).toLocaleDateString()}</span>
-          ${aiScore ? `<span class="ai-score">AI: ${aiScore}/100</span>` : ""}
+      <div class="submission-item">
+        <div class="submission-header">
+          <strong>${this.escapeHtml(projectName)} - ${this.escapeHtml(
+      (draft.product_idea || "").substring(0, 60)
+    )}${
+      draft.product_idea && draft.product_idea.length > 60 ? "..." : ""
+    }</strong>
+          <span class="status ${statusClass}">${statusText}</span>
+        </div>
+        <div class="submission-meta">
+          Saved: ${new Date(draft.saved_at).toLocaleString()}
+          ${aiScore ? `• AI Score: ${aiScore}/100` : ""}
         </div>
         ${this.renderAIFeedback(draft.ai_feedback)}
       </div>
     `;
   }
 
-  // Screen 3: Enhanced Submit Ideas with Dynamic Forms and Translation
-  async loadSubmitScreen() {
-    this.updateGreeting();
+  renderAIFeedback(feedback) {
+    if (!feedback) return "";
+
+    // Handle both old and new feedback formats
+    if (feedback.critique && feedback.suggestions && feedback.grading) {
+      // New structured format
+      return this.renderStructuredAIFeedback(feedback);
+    } else {
+      // Legacy format
+      return this.renderLegacyAIFeedback(feedback);
+    }
+  }
+
+  renderStructuredAIFeedback(feedback) {
+    return `
+      <div class="ai-feedback">
+        <h5>AI Analysis (Score: ${feedback.overall_score}/100)</h5>
+        
+        <div class="feedback-summary">
+          <p><strong>Summary:</strong> ${this.escapeHtml(feedback.summary)}</p>
+        </div>
+        
+        <div class="critique-section">
+          <h6>Strengths</h6>
+          <ul>${feedback.critique.strengths
+            .map((strength) => `<li>${this.escapeHtml(strength)}</li>`)
+            .join("")}</ul>
+          
+          <h6>Areas for Improvement</h6>
+          <ul>${feedback.critique.weaknesses
+            .map((weakness) => `<li>${this.escapeHtml(weakness)}</li>`)
+            .join("")}</ul>
+        </div>
+        
+        <div class="suggestions-section">
+          <h6>Actionable Recommendations</h6>
+          <ul>${feedback.suggestions
+            .map((suggestion) => `<li>${this.escapeHtml(suggestion)}</li>`)
+            .join("")}</ul>
+        </div>
+        
+        <div class="grading-section">
+          <h6>Detailed Scoring</h6>
+          <div class="score-grid">
+            ${Object.entries(feedback.grading)
+              .map(
+                ([criterion, data]) => `
+                <div class="score-item">
+                  <div class="score-label">${this.formatFeedbackTitle(
+                    criterion
+                  )}</div>
+                  <div class="score-value">${data.score}/10</div>
+                  <div class="score-reasoning">${this.escapeHtml(
+                    data.reasoning
+                  )}</div>
+                </div>
+              `
+              )
+              .join("")}
+          </div>
+        </div>
+      </div>
+    `;
+  }
+
+  renderLegacyAIFeedback(feedback) {
+    return `
+      <div class="ai-feedback">
+        <h5>AI Feedback (Score: ${feedback.score}/100)</h5>
+        <div class="feedback-sections">
+          ${Object.entries(feedback)
+            .filter(([key]) => key !== "score")
+            .map(
+              ([key, bullets]) => `
+            <div class="feedback-section">
+              <h6>${this.formatFeedbackTitle(key)}</h6>
+              <ul>${bullets
+                .map((bullet) => `<li>${this.escapeHtml(bullet)}</li>`)
+                .join("")}</ul>
+            </div>
+          `
+            )
+            .join("")}
+        </div>
+      </div>
+    `;
+  }
+
+  // Screen 3: Submit Ideas - Fixed to allow 3 attempts and final draft confirmation
+  loadSubmitScreen() {
     this.setupSubmitForm();
     this.updateWordCounts();
-    await this.setupUserSelectOptions();
+    this.setupUserSelectOptions();
     this.setupCategoryMultiSelect();
-    await this.checkCooldownStatus();
-    
-    // Check for and restore auto-saved drafts
-    setTimeout(() => this.restoreAutoSavedDraft(), 500);
-  }
-
-  updateGreeting() {
-    const greetingElement = document.getElementById("greeting-text");
-    if (greetingElement) {
-      const userName = this.currentUser || "there";
-      const greetings = [
-        `Hey ${userName}! Ready to share your idea?`,
-        `What's cooking, ${userName}?`,
-        `Time to make magic happen, ${userName}!`,
-        `Let's build something amazing, ${userName}!`
-      ];
-      const randomGreeting = greetings[Math.floor(Math.random() * greetings.length)];
-      
-      const translatedGreeting = this.translations?.ui[randomGreeting] || randomGreeting;
-      greetingElement.textContent = translatedGreeting;
-    }
-  }
-
-  async checkCooldownStatus() {
-    if (!this.currentUser || !this.currentProject) return;
-
-    const cooldownElement = document.getElementById("cooldown-message");
-    const cooldownDaysElement = document.getElementById("cooldown-days");
-    
-    // Check last submission date from drafts
-    try {
-      const drafts = await dbHelper.getDraftsByUserAndProject(this.currentUser, this.currentProject);
-      const finalSubmissions = drafts.filter(d => d.is_final);
-      
-      if (finalSubmissions.length > 0) {
-        const lastSubmission = finalSubmissions.sort((a, b) => 
-          new Date(b.created_at || b.saved_at) - new Date(a.created_at || a.saved_at)
-        )[0];
-        
-        const daysSinceSubmission = Math.floor(
-          (Date.now() - new Date(lastSubmission.created_at || lastSubmission.saved_at)) / (1000 * 60 * 60 * 24)
-        );
-        
-        const cooldownDays = window.ENV.DRAFT_COOLDOWN_DAYS || 7;
-        const showCooldown = daysSinceSubmission < cooldownDays;
-        
-        if (showCooldown) {
-          const remainingDays = cooldownDays - daysSinceSubmission;
-          cooldownElement.classList.remove("hidden");
-          if (cooldownDaysElement) {
-            cooldownDaysElement.textContent = remainingDays;
-          }
-          
-          // Disable form submission
-          const submitButton = document.getElementById("submit-button");
-          if (submitButton) {
-            submitButton.disabled = true;
-            submitButton.textContent = this.t("In Cooldown Period");
-          }
-          
-          return;
-        }
-      }
-    } catch (error) {
-      console.error("Error checking cooldown:", error);
-    }
-    
-    cooldownElement.classList.add("hidden");
-    const submitButton = document.getElementById("submit-button");
-    if (submitButton) {
-      submitButton.disabled = false;
-      this.updateSubmitButtonText();
-    }
-  }
-
-  updateSubmitButtonText() {
-    const submitButton = document.getElementById("submit-button");
-    if (!submitButton || !this.currentUser || !this.currentProject) return;
-
-    // Determine current draft number
-    dbHelper.getDraftsByUserAndProject(this.currentUser, this.currentProject).then(existingDrafts => {
-      const realDrafts = existingDrafts.filter(d => d.version > 0);
-      const attemptNumber = realDrafts.length + 1;
-      
-      let buttonText;
-      if (attemptNumber <= 2) {
-        buttonText = `${this.t("Submit Draft")} ${attemptNumber}`;
-      } else if (attemptNumber === 3) {
-        buttonText = this.t("Submit Final Version");
-      } else {
-        buttonText = this.t("Maximum Reached");
-        submitButton.disabled = true;
-      }
-      
-      if (!this.isOnline) {
-        buttonText += ` (${this.t("Offline")})`;
-      }
-      
-      submitButton.textContent = buttonText;
-    });
   }
 
   setupSubmitForm() {
@@ -854,18 +630,18 @@ class CapseraApp {
 
     // Remove existing listeners to avoid duplicates
     form.removeEventListener("submit", this.handleSubmissionBound);
+
+    // Bind the method to preserve 'this' context
     this.handleSubmissionBound = this.handleSubmission.bind(this);
+
+    // Form submission
     form.addEventListener("submit", this.handleSubmissionBound);
 
-    // Word count listeners for auto-expanding textareas
+    // Word count listeners
     form.querySelectorAll('textarea, input[type="text"]').forEach((input) => {
       input.removeEventListener("input", this.updateWordCountsBound);
       this.updateWordCountsBound = this.updateWordCounts.bind(this);
       input.addEventListener("input", this.updateWordCountsBound);
-      
-      if (input.classList.contains("auto-expand")) {
-        this.autoExpandTextarea(input);
-      }
     });
 
     // User selection
@@ -879,7 +655,10 @@ class CapseraApp {
     // Project selection
     const projectSelect = document.getElementById("project-select");
     if (projectSelect) {
-      projectSelect.removeEventListener("change", this.handleProjectSelectBound);
+      projectSelect.removeEventListener(
+        "change",
+        this.handleProjectSelectBound
+      );
       this.handleProjectSelectBound = this.handleProjectSelect.bind(this);
       projectSelect.addEventListener("change", this.handleProjectSelectBound);
     }
@@ -888,230 +667,82 @@ class CapseraApp {
   setupCategoryMultiSelect() {
     const categorySelect = document.getElementById("category");
     if (!categorySelect) return;
+
+    // Convert single select to multi-select
     categorySelect.multiple = true;
-    categorySelect.size = 5;
+    categorySelect.size = 5; // Show 5 options at once
   }
 
-  async handleUserSelect(e) {
+  handleUserSelect(e) {
     const selectedValue = e.target.value;
     
     if (selectedValue === "new") {
-      await this.showUserCreationForm();
+      this.showUserCreationForm();
     } else if (selectedValue) {
-      await this.selectExistingUser(selectedValue);
+      // Attempt to select existing user
+      this.selectExistingUser(selectedValue);
     } else {
+      // User selected "Select User" option
       this.currentUser = null;
-      this.currentUserId = null;
       this.currentProject = null;
-      this.projects = [];
-      await this.setupProjectSelectOptions();
+      this.setupProjectSelectOptions(); // This will clear project options
     }
-    
-    this.updateGreeting();
-    await this.checkCooldownStatus();
-    this.updateSubmitButtonText();
   }
 
-  async handleProjectSelect(e) {
+  handleProjectSelect(e) {
     if (e.target.value === "new") {
-      await this.createNewProject();
+      this.createNewProject();
     } else {
       this.currentProject = e.target.value;
     }
-    await this.checkCooldownStatus();
-    this.updateSubmitButtonText();
-    
-    // Try to restore auto-saved draft for this project
-    setTimeout(() => this.restoreAutoSavedDraft(), 100);
   }
 
-  // FIXED: Enhanced createNewProject method to ensure proper transaction handling
   async createNewProject() {
-    const projectName = prompt(this.t("Enter project name:"));
-    if (!projectName || !projectName.trim()) return;
-
-    if (!this.currentUser) {
-      this.showMessage(this.t("Please select a user first"), "error");
-      return;
-    }
+    const projectName = prompt("Enter project name:");
+    if (!projectName) return;
 
     this.currentProject = projectName;
 
-    try {
-      this.projects.push({ 
-        name: projectName, 
-        user_id: this.currentUserId, 
-        needs_sync: !this.isOnline 
-      });
+    // Save a placeholder draft locally to persist the project
+    await dbHelper.saveDraft({
+      device_id: dbHelper.getDeviceId(),
+      full_name: this.currentUser,
+      project_name: projectName,
+      ideal_customer_profile: "",
+      product_idea: "",
+      pain_points: "",
+      alternatives: "",
+      category: [],
+      heard_about: "",
+      version: 0, // 0 means placeholder
+      is_final: false,
+    });
 
-      await this.saveProjectsLocally(this.currentUserId, this.projects);
-
-      // FIXED: Prepare the placeholder draft with all required fields BEFORE calling saveDraft
-      // This ensures no async operations happen during the IndexedDB transaction
-      const placeholderDraft = {
-        device_id: dbHelper.getDeviceId(),
-        full_name: this.currentUser,
-        user_id: this.currentUserId,
-        project_name: projectName,
-        ideal_customer_profile: "",
-        product_idea: "",
-        pain_points: "",
-        alternatives: "",
-        category: [],
-        heard_about: "",
-        version: 0,
-        is_final: false,
-        needs_sync: !this.isOnline,
-        saved_at: new Date().toISOString()
-      };
-
-      // FIXED: Call saveDraft with prepared data to prevent transaction timeout
-      await dbHelper.saveDraft(placeholderDraft);
-      await this.setupProjectSelectOptions();
-      
-      const projectSelect = document.getElementById("project-select");
-      if (projectSelect) {
-        projectSelect.value = projectName;
-      }
-
-      if (this.isOnline) {
-        try {
-          // TODO: Add supabaseHelper.createProject method when available
-          const projectIndex = this.projects.findIndex(p => p.name === projectName);
-          if (projectIndex !== -1) {
-            this.projects[projectIndex].needs_sync = false;
-            await this.saveProjectsLocally(this.currentUserId, this.projects);
-          }
-        } catch (error) {
-          console.error("Failed to sync project to server:", error);
-        }
-      }
-
-      this.showMessage(`${this.t("Project created")}: "${projectName}"!`, "success");
-      this.updateSubmitButtonText();
-    } catch (error) {
-      console.error("Error creating project:", error);
-      this.showMessage(this.t("Failed to create project"), "error");
-      
-      // Clean up on error
-      this.projects = this.projects.filter(p => p.name !== projectName);
-      if (this.currentProject === projectName) {
-        this.currentProject = null;
-      }
-      await this.setupProjectSelectOptions();
-    }
+    await this.setupProjectSelectOptions();
+    this.showMessage(`Project "${projectName}" created`, "success");
   }
 
   async setupProjectSelectOptions() {
     const projectSelect = document.getElementById("project-select");
     if (!projectSelect || !this.currentUser) return;
 
-    if (this.currentUserId) {
-      this.projects = await this.loadProjectsLocally(this.currentUserId);
-    }
-
-    if (this.isOnline && this.currentUserId) {
-      try {
-        // TODO: Add supabaseHelper.getProjectsByUserId method
-      } catch (error) {
-        console.error("Failed to load projects from server:", error);
-      }
-    }
-
-    if (!this.projects.length) {
-      const userDrafts = await dbHelper.getDraftsByUser(this.currentUser);
-      const projectNames = [...new Set(userDrafts.map((d) => d.project_name || "Default Project"))];
-      this.projects = projectNames.map(name => ({ 
-        name, 
-        user_id: this.currentUserId,
-        needs_sync: false 
-      }));
-      
-      if (this.currentUserId) {
-        await this.saveProjectsLocally(this.currentUserId, this.projects);
-      }
-    }
+    const userDrafts = await dbHelper.getDraftsByUser(this.currentUser);
+    const projects = [
+      ...new Set(userDrafts.map((d) => d.project_name || "Default Project")),
+    ];
 
     projectSelect.innerHTML = `
-      <option value="">${this.t("Select Project")}</option>
-      <option value="new">${this.t("Create New Project")}</option>
-      ${this.projects.map(project => `
-        <option value="${this.escapeHtml(project.name)}" ${project.name === this.currentProject ? "selected" : ""}>
-          ${this.escapeHtml(project.name)}${project.needs_sync ? " (offline)" : ""}
-        </option>
-      `).join("")}
+      <option value="">Select Project</option>
+      <option value="new">Create New Project</option>
+      ${projects
+        .map(
+          (project) =>
+            `<option value="${this.escapeHtml(project)}" ${
+              project === this.currentProject ? "selected" : ""
+            }>${this.escapeHtml(project)}</option>`
+        )
+        .join("")}
     `;
-  }
-
-  async saveProjectsLocally(userId, projects) {
-    if (!userId) return;
-    
-    try {
-      const key = `capsera_projects_${userId}`;
-      const data = {
-        projects: projects,
-        updated_at: new Date().toISOString()
-      };
-      
-      try {
-        await dbHelper.saveSetting(key, data);
-      } catch (error) {
-        localStorage.setItem(key, JSON.stringify(data));
-      }
-    } catch (error) {
-      console.error("Failed to save projects locally:", error);
-    }
-  }
-
-  async loadProjectsLocally(userId) {
-    if (!userId) return [];
-    
-    try {
-      const key = `capsera_projects_${userId}`;
-      
-      try {
-        const data = await dbHelper.getSetting(key);
-        if (data && data.projects) {
-          return data.projects;
-        }
-      } catch (error) {
-        console.log("IndexedDB fallback failed, trying localStorage");
-      }
-      
-      const stored = localStorage.getItem(key);
-      if (stored) {
-        const data = JSON.parse(stored);
-        return data.projects || [];
-      }
-    } catch (error) {
-      console.error("Failed to load projects locally:", error);
-    }
-    
-    return [];
-  }
-
-  async syncOfflineProjects() {
-    if (!this.isOnline || !this.currentUserId) return;
-
-    const unsynced = this.projects.filter(p => p.needs_sync);
-    if (!unsynced.length) return;
-
-    let syncedCount = 0;
-    for (const project of unsynced) {
-      try {
-        // TODO: Call supabaseHelper.createProject when available
-        project.needs_sync = false;
-        syncedCount++;
-      } catch (error) {
-        console.error(`Failed to sync project "${project.name}":`, error);
-      }
-    }
-
-    if (syncedCount > 0) {
-      await this.saveProjectsLocally(this.currentUserId, this.projects);
-      this.showMessage(`Synced ${syncedCount} projects to server`, "success");
-      await this.setupProjectSelectOptions();
-    }
   }
 
   async setupUserSelectOptions() {
@@ -1121,11 +752,16 @@ class CapseraApp {
     const users = await dbHelper.getAllUsers();
 
     userSelect.innerHTML = `
-      <option value="">${this.t("Select User")}</option>
-      <option value="new">${this.t("Create New User")}</option>
-      ${users.map(user => `
-        <option value="${this.escapeHtml(user.full_name)}">${this.escapeHtml(user.full_name)}</option>
-      `).join("")}
+      <option value="">Select User</option>
+      <option value="new">Create New User</option>
+      ${users
+        .map(
+          (user) =>
+            `<option value="${this.escapeHtml(
+              user.full_name
+            )}">${this.escapeHtml(user.full_name)}</option>`
+        )
+        .join("")}
     `;
   }
 
@@ -1142,36 +778,46 @@ class CapseraApp {
       const counter = document.getElementById(`${id}-count`);
 
       if (input && counter) {
-        const words = input.value.trim().split(/\s+/).filter((w) => w.length > 0);
+        const words = input.value
+          .trim()
+          .split(/\s+/)
+          .filter((w) => w.length > 0);
         const count = words.length;
 
-        counter.innerHTML = `${count} <span data-ui-key="words">${this.t("words")}</span> (${min}-${max})`;
-        counter.className = count > max ? "word-counter over-limit" : "word-counter";
+        counter.textContent = `${count} words (${min}-${max})`;
+        counter.className =
+          count > max ? "word-counter over-limit" : "word-counter";
       }
     });
   }
 
+  // Fixed submission handling to allow 3 attempts and proper final draft confirmation
   async handleSubmission(e) {
     e.preventDefault();
 
+    console.log("🔧 DEBUG: Starting submission process");
+
     if (!this.currentUser) {
-      this.showMessage(this.t("Please select or create a user first"), "error");
+      this.showMessage("Please select or create a user first", "error");
       return;
     }
 
     if (!this.currentProject) {
-      this.showMessage(this.t("Please select or create a project"), "error");
+      this.showMessage("Please select or create a project", "error");
       return;
     }
 
     const formData = new FormData(e.target);
+
+    // Get selected categories (now multi-select)
     const categorySelect = document.getElementById("category");
-    const selectedCategories = Array.from(categorySelect?.selectedOptions || []).map(option => option.value);
+    const selectedCategories = Array.from(categorySelect.selectedOptions).map(
+      (option) => option.value
+    );
 
     const submission = {
       device_id: dbHelper.getDeviceId(),
       full_name: this.currentUser,
-      user_id: this.currentUserId,
       project_name: this.currentProject,
       ideal_customer_profile: formData.get("ideal_customer_profile"),
       product_idea: formData.get("product_idea"),
@@ -1179,17 +825,15 @@ class CapseraApp {
       alternatives: formData.get("alternatives"),
       category: selectedCategories,
       heard_about: formData.get("heard_about"),
-      market_validation: formData.get("market_validation"),
-      competitor_research: formData.get("competitor_research"),
-      mvp_development: formData.get("mvp_development"),
-      investor_pitch: formData.get("investor_pitch"),
-      additional_research: formData.get("additional_research"),
-      mvp_link: formData.get("mvp_link"),
-      needs_sync: !this.isOnline,
-      saved_at: new Date().toISOString()
     };
 
-    const validationResult = await validation.validateSubmission(submission, this.ideas);
+    console.log("🔧 DEBUG: Submission data:", submission);
+
+    // Validate submission
+    const validationResult = await validation.validateSubmission(
+      submission,
+      this.ideas
+    );
 
     if (!validationResult.passed) {
       this.showMessage(validationResult.errors.join(", "), "error");
@@ -1198,134 +842,156 @@ class CapseraApp {
 
     submission.quality_score = validationResult.qualityScore;
 
-    const existingDrafts = await dbHelper.getDraftsByUserAndProject(this.currentUser, this.currentProject);
+    // Determine attempt number for this project (fixed to allow 3 attempts)
+    const existingDrafts = await dbHelper.getDraftsByUserAndProject(
+      this.currentUser,
+      this.currentProject
+    );
+
+    // Filter out placeholder drafts (version 0)
     const realDrafts = existingDrafts.filter((d) => d.version > 0);
     const attemptNumber = realDrafts.length + 1;
     submission.version = attemptNumber;
 
-    try {
-      const submitButton = document.getElementById("submit-button");
-      const originalText = submitButton?.textContent;
-      if (submitButton) {
-        submitButton.textContent = this.t("Submitting...");
-        submitButton.disabled = true;
-      }
+    console.log(
+      "🔧 DEBUG: Attempt number:",
+      attemptNumber,
+      "Real drafts found:",
+      realDrafts.length
+    );
 
+    try {
       if (attemptNumber <= 2) {
-        if (attemptNumber === 1) {
-          submission.first_draft_submitted_at = new Date().toISOString();
+        // Attempts 1 & 2: Save locally + get AI feedback
+        console.log(
+          "🔧 DEBUG: Processing draft submission (attempt",
+          attemptNumber,
+          ")"
+        );
+
+        const aiFeedback = await supabaseHelper.getAIFeedback(submission);
+        submission.ai_feedback = aiFeedback;
+
+        // Update quality score with AI's overall assessment if available
+        if (aiFeedback.overall_score) {
+          submission.quality_score = aiFeedback.overall_score;
         }
 
         await dbHelper.saveDraft(submission);
-        
-        const statusMsg = this.isOnline ? 
-          `${this.t("Draft")} ${attemptNumber} ${this.t("saved")}! AI feedback coming soon.` :
-          `${this.t("Draft")} ${attemptNumber} ${this.t("saved locally")}! Will sync when online.`;
-        
-        this.showMessage(statusMsg, "success");
-        
-        // Clear auto-saved drafts for this project
-        const autoSaved = existingDrafts.filter(d => d.auto_saved && d.version === 0);
-        for (const draft of autoSaved) {
-          await dbHelper.deleteDraft(draft.id);
-        }
-        
+
+        this.showMessage(
+          `Draft ${attemptNumber} saved successfully! AI feedback generated.`,
+          "success"
+        );
+        this.showAIFeedbackModal(aiFeedback);
         this.clearForm();
-        await this.checkCooldownStatus();
-        
       } else if (attemptNumber === 3) {
-        const confirmed = confirm(this.t("This is your final submission! Are you sure you're ready?"));
-        
+        // Attempt 3: Show confirmation and submit final
+        console.log("🔧 DEBUG: Processing final submission (attempt 3)");
+
+        const confirmed = confirm(
+          "⚠️ FINAL SUBMISSION WARNING ⚠️\n\nThis is your 3rd and final submission for this project. After submitting:\n• You cannot make any more changes\n• This idea will be saved permanently\n• You cannot submit again for this project\n\nAre you absolutely sure you want to proceed?"
+        );
+
         if (!confirmed) {
-          if (submitButton) {
-            submitButton.textContent = originalText;
-            submitButton.disabled = false;
-          }
+          console.log("🔧 DEBUG: Final submission cancelled by user");
           return;
         }
 
+        // Get final AI feedback
+        const aiFeedback = await supabaseHelper.getAIFeedback(submission);
+        submission.ai_feedback = aiFeedback;
         submission.is_final = true;
 
-        if (this.isOnline) {
-          // TODO: await supabaseHelper.submitFinalIdea(submission);
-          // TODO: await supabaseHelper.createOrGetUser(this.currentUser, dbHelper.getDeviceId());
-        } else {
-          await dbHelper.addToSyncQueue(submission);
+        // Update quality score with AI's overall assessment if available
+        if (aiFeedback.overall_score) {
+          submission.quality_score = aiFeedback.overall_score;
         }
 
-        await dbHelper.saveDraft(submission);
-        
-        const finalMsg = this.isOnline ?
-          this.t("Idea submitted successfully! Thank you!") :
-          this.t("Final submission saved locally! Will sync when online.");
-          
-        this.showMessage(finalMsg, "success");
-        this.clearForm();
-        
+        if (this.isOnline) {
+          console.log("🔧 DEBUG: Submitting final idea to Supabase");
+
+          // Submit to Supabase
+          try {
+            await supabaseHelper.submitFinalIdea(submission);
+            await supabaseHelper.createUser(this.currentUser);
+
+            console.log(
+              "🔧 DEBUG: Final idea submitted successfully to Supabase"
+            );
+          } catch (supabaseError) {
+            console.error(
+              "🔧 DEBUG: Supabase submission failed:",
+              supabaseError
+            );
+            throw supabaseError;
+          }
+
+          // Save final draft locally
+          await dbHelper.saveDraft(submission);
+
+          this.showMessage(
+            "🎉 Idea submitted successfully! Thank you for using Capsera.",
+            "success"
+          );
+          this.showAIFeedbackModal(aiFeedback);
+          this.clearForm();
+        } else {
+          console.log("🔧 DEBUG: Offline - queuing final submission");
+
+          // Queue for later submission
+          await dbHelper.saveDraft(submission);
+          await dbHelper.addToSyncQueue(submission);
+          this.showMessage("Queued for submission when online", "warning");
+        }
       } else {
-        this.showMessage(this.t("Maximum submissions reached for this project."), "error");
+        // More than 3 attempts - should not happen, but safety check
+        console.log(
+          "🔧 DEBUG: Too many attempts for project:",
+          this.currentProject
+        );
+        this.showMessage(
+          "Maximum 3 submission attempts reached for this project. Please create a new project.",
+          "error"
+        );
       }
     } catch (error) {
-      console.error("Submission error:", error);
-      this.showMessage(`${this.t("Submission failed")}: ${error.message}`, "error");
-    } finally {
-      const submitButton = document.getElementById("submit-button");
-      if (submitButton && originalText) {
-        submitButton.textContent = originalText;
-        submitButton.disabled = false;
-      }
+      console.error("🔧 DEBUG: Submission error:", error);
+      this.showMessage(
+        `Submission failed: ${error.message}. Please try again.`,
+        "error"
+      );
     }
   }
 
-  // Enhanced AI Feedback Rendering with Translation
-  renderAIFeedback(feedback) {
-    if (!feedback) return "";
+  showAIFeedbackModal(feedback) {
+    const modal = document.createElement("div");
+    modal.className = "modal-overlay";
 
-    if (feedback.critique && feedback.suggestions && feedback.grading) {
-      return this.renderStructuredAIFeedback(feedback);
-    } else {
-      return this.renderLegacyAIFeedback(feedback);
-    }
-  }
+    // Handle both old and new feedback formats for modal title
+    const score = feedback.overall_score || feedback.score;
 
-  renderStructuredAIFeedback(feedback) {
-    return `
-      <div class="ai-feedback-compact">
-        <div class="feedback-header">
-          <span class="ai-badge">${this.t("AI Analysis")}</span>
-          <span class="score-badge">${feedback.overall_score}/100</span>
+    modal.innerHTML = `
+      <div class="modal-content">
+        <div class="modal-header">
+          <h3>AI Analysis (Score: ${score}/100)</h3>
+          <button onclick="this.closest('.modal-overlay').remove()">×</button>
         </div>
-        <div class="feedback-summary">
-          <strong>Key Points:</strong>
-          <ul class="feedback-bullets">
-            ${feedback.critique.strengths.slice(0, 2).map(strength => `<li class="strength">+ ${this.escapeHtml(strength)}</li>`).join("")}
-            ${feedback.critique.weaknesses.slice(0, 2).map(weakness => `<li class="weakness">- ${this.escapeHtml(weakness)}</li>`).join("")}
-          </ul>
+        <div class="modal-body">
+          ${this.renderAIFeedback(feedback)}
+          <div class="modal-footer">
+            <button class="btn btn-primary" onclick="this.closest('.modal-overlay').remove()">
+              Close
+            </button>
+          </div>
         </div>
       </div>
     `;
+
+    document.body.appendChild(modal);
   }
 
-  renderLegacyAIFeedback(feedback) {
-    return `
-      <div class="ai-feedback-compact">
-        <div class="feedback-header">
-          <span class="ai-badge">${this.t("AI Feedback")}</span>
-          <span class="score-badge">${feedback.score}/100</span>
-        </div>
-        <div class="feedback-summary">
-          ${Object.entries(feedback).filter(([key]) => key !== "score").slice(0, 1).map(([key, bullets]) => `
-            <strong>${this.formatFeedbackTitle(key)}:</strong>
-            <ul class="feedback-bullets">
-              ${bullets.slice(0, 3).map(bullet => `<li>${this.escapeHtml(bullet)}</li>`).join("")}
-            </ul>
-          `).join("")}
-        </div>
-      </div>
-    `;
-  }
-
-  // Screen 4: Settings with Enhanced Translation Support
+  // Screen 4: Settings - Enhanced language switching with loading
   async loadSettingsScreen() {
     this.renderLanguageSelector();
     await this.loadUsersList();
@@ -1336,12 +1002,17 @@ class CapseraApp {
     if (!container) return;
 
     const currentLang = translator.getCurrentLanguage();
-    const html = translator.supportedLangs.map(lang => `
+
+    const html = translator.supportedLangs
+      .map(
+        (lang) => `
       <div class="language-option ${lang === currentLang ? "selected" : ""}" 
            onclick="app.selectLanguage('${lang}')">
         ${translator.getLanguageName(lang)}
       </div>
-    `).join("");
+    `
+      )
+      .join("");
 
     container.innerHTML = html;
   }
@@ -1349,6 +1020,7 @@ class CapseraApp {
   async selectLanguage(lang) {
     if (lang === this.currentLanguage) return;
 
+    // Show loading overlay
     const loadingOverlay = document.createElement("div");
     loadingOverlay.className = "modal-overlay";
     loadingOverlay.innerHTML = `
@@ -1356,7 +1028,7 @@ class CapseraApp {
         <div class="modal-body">
           <div class="loading">
             <div class="loading-spinner"></div>
-            <p>${this.t("Updating language...")}</p>
+            <p>Updating language... Please wait.</p>
           </div>
         </div>
       </div>
@@ -1369,11 +1041,11 @@ class CapseraApp {
         this.translations = await translator.getTranslations(lang);
         translator.applyTranslations(this.translations);
         this.renderLanguageSelector();
-        this.showMessage(this.t("Language updated successfully"), "success");
+        this.showMessage("Language updated successfully", "success");
       }
     } catch (error) {
       console.error("Language update failed:", error);
-      this.showMessage(this.t("Failed to update language"), "error");
+      this.showMessage("Failed to update language", "error");
     } finally {
       loadingOverlay.remove();
     }
@@ -1384,22 +1056,35 @@ class CapseraApp {
     if (!container) return;
 
     try {
+      const users = await supabaseHelper.getAllUsers();
       const localUsers = await dbHelper.getAllUsers();
-      const allUsers = localUsers;
+
+      // Combine and dedupe users
+      const allUsers = [...users, ...localUsers].reduce((acc, user) => {
+        if (!acc.find((u) => u.full_name === user.full_name)) {
+          acc.push(user);
+        }
+        return acc;
+      }, []);
 
       if (allUsers.length === 0) {
-        container.innerHTML = `<div class="text-center">${this.t("No users found")}</div>`;
+        container.innerHTML = '<div class="text-center">No users found</div>';
         return;
       }
 
-      const html = allUsers.map(user => `
+      const html = allUsers
+        .map(
+          (user) => `
         <div class="user-item">
           <span>${this.escapeHtml(user.full_name)}</span>
-          <button class="btn btn-danger btn-sm" onclick="app.deleteUser('${user.full_name}')">
-            ${this.t("Delete")}
+          <button class="btn btn-danger btn-sm" 
+                  onclick="app.deleteUser('${user.full_name}')">
+            Delete
           </button>
         </div>
-      `).join("");
+      `
+        )
+        .join("");
 
       container.innerHTML = html;
     } catch (error) {
@@ -1408,91 +1093,51 @@ class CapseraApp {
     }
   }
 
-  // Enhanced offline data sync with better error handling
+  // Updated syncOfflineData method as per instructions
   async syncOfflineData() {
     if (!this.isOnline) return;
 
-    try {
-      const queue = await dbHelper.getSyncQueue();
-      let syncedCount = 0;
-      let failedCount = 0;
+    console.log("🔧 SYNC: Starting offline data sync");
 
-      for (const item of queue) {
-        try {
-          // TODO: Implement actual server sync based on item type
-          // if (item.type === 'draft') {
-          //   await supabaseHelper.submitFinalIdea(item.data);
-          // } else if (item.type === 'feedback') {
-          //   await supabaseHelper.submitFeedback(item.data);
-          // }
-          
-          await dbHelper.removeFromSyncQueue(item.key);
-          syncedCount++;
-        } catch (error) {
-          console.error("Sync failed for item:", item.key, error);
-          failedCount++;
-        }
+    // Sync ideas queue (existing code)
+    const queue = await dbHelper.getSyncQueue();
+
+    for (const item of queue) {
+      try {
+        await supabaseHelper.submitFinalIdea(item);
+        await supabaseHelper.createUser(item.full_name);
+        await dbHelper.removeFromSyncQueue(item.key);
+      } catch (error) {
+        console.error("Sync failed for item:", item.key, error);
       }
+    }
 
-      if (syncedCount > 0) {
-        this.showMessage(`Synced ${syncedCount} items${failedCount > 0 ? `, ${failedCount} failed` : ''}`, 
-          failedCount > 0 ? "warning" : "success");
-      }
-
-      // Sync projects
-      await this.syncOfflineProjects();
-      
-      // Sync drafts that need syncing
-      await this.syncOfflineDrafts();
-      
-    } catch (error) {
-      console.error("Sync operation failed:", error);
-      this.showMessage(this.t("Sync failed. Will retry later."), "error");
+    const totalSynced = queue.length;
+    if (totalSynced > 0) {
+      this.showMessage(`Synced ${totalSynced} submissions`, "success");
     }
   }
 
-  async syncOfflineDrafts() {
-    try {
-      const allDrafts = await dbHelper.getAllDrafts();
-      const unsyncedDrafts = allDrafts.filter(d => d.needs_sync);
-      
-      let syncedCount = 0;
-      for (const draft of unsyncedDrafts) {
-        try {
-          if (draft.is_final) {
-            // TODO: await supabaseHelper.submitFinalIdea(draft);
-          }
-          // TODO: Mark draft as synced in database
-          // await dbHelper.markDraftAsSynced(draft.id);
-          syncedCount++;
-        } catch (error) {
-          console.error(`Failed to sync draft ${draft.id}:`, error);
-        }
-      }
-      
-      if (syncedCount > 0) {
-        console.log(`Synced ${syncedCount} drafts`);
-      }
-    } catch (error) {
-      console.error("Failed to sync drafts:", error);
-    }
-  }
-
-  // Utility methods with translation support
   showMessage(message, type = "info") {
     const toast = document.createElement("div");
     toast.className = `toast ${type}`;
     toast.textContent = message;
     toast.style.cssText = `
-      position: fixed; top: 20px; right: 20px; z-index: 1001;
+      position: fixed; top: 20px; right: 20px; z-index: 1000;
       padding: 12px 20px; border-radius: 4px; color: white;
-      background: ${type === "success" ? "#28a745" : type === "error" ? "#dc3545" : type === "warning" ? "#ffc107" : "#17a2b8"};
-      font-weight: 600; box-shadow: 0 4px 12px rgba(0,0,0,0.15);
-      animation: slideInRight 0.3s ease;
+      background: ${
+        type === "success"
+          ? "#28a745"
+          : type === "error"
+          ? "#dc3545"
+          : type === "warning"
+          ? "#ffc107"
+          : "#17a2b8"
+      };
     `;
 
     document.body.appendChild(toast);
-    setTimeout(() => toast.remove(), 4000);
+    setTimeout(() => toast.remove(), 3000);
   }
 
   escapeHtml(text) {
@@ -1503,115 +1148,102 @@ class CapseraApp {
   }
 
   formatFeedbackTitle(key) {
-    return key.split("_").map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(" ");
+    return key
+      .split("_")
+      .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+      .join(" ");
   }
 
   clearForm() {
     const form = document.getElementById("submit-form");
     if (form) {
       form.reset();
-      form.querySelectorAll(".auto-expand").forEach(textarea => {
-        textarea.style.height = "auto";
-        this.autoExpandTextarea(textarea);
-      });
       this.updateWordCounts();
     }
     this.currentProject = null;
   }
 
   async deleteUser(fullName) {
-    const pin = prompt(this.t("Enter your 4-digit PIN:"));
+    const pin = prompt("Enter 4-digit PIN to delete user:");
     if (!pin || pin.length !== 4) return;
 
     const localUser = await dbHelper.getUser(fullName);
     if (!localUser || dbHelper.hashPin(pin) !== localUser.pin_hash) {
-      this.showMessage(this.t("Invalid PIN"), "error");
+      this.showMessage("Invalid PIN", "error");
       return;
     }
 
     try {
       await dbHelper.deleteUser(fullName);
-      this.showMessage(this.t("User deleted"), "success");
-      await this.loadUsersList();
+      if (this.isOnline) {
+        await supabaseHelper.deleteUser(fullName);
+      }
+
+      this.showMessage("User deleted", "success");
+      this.loadUsersList();
     } catch (error) {
       console.error("Delete user error:", error);
-      this.showMessage(this.t("Failed to delete user"), "error");
+      this.showMessage("Failed to delete user", "error");
     }
   }
 
   async showUserCreationForm() {
-    const name = prompt(this.t("What's your full name?"));
+    const name = prompt("Enter your full name:");
     if (!name) return;
 
-    const pin = prompt(this.t("Create a 4-digit PIN:"));
+    const pin = prompt("Create a 4-digit PIN for this account:");
     if (!pin || pin.length !== 4 || !/^\d{4}$/.test(pin)) {
-      this.showMessage(this.t("PIN must be exactly 4 digits"), "error");
+      this.showMessage("PIN must be exactly 4 digits", "error");
       return;
     }
 
-    try {
-      const pinHash = dbHelper.hashPin(pin);
-      const userData = await dbHelper.saveUser(name, pinHash);
+    const pinHash = dbHelper.hashPin(pin);
+    await dbHelper.saveUser(name, pinHash);
 
-      this.currentUser = name;
-      this.currentUserId = userData.id;
-      this.projects = [];
-      
-      if (this.isOnline) {
-        try {
-          // TODO: Call supabaseHelper.createOrGetUser when implementation is available
-          // const serverUser = await supabaseHelper.createOrGetUser(name, dbHelper.getDeviceId());
-          // this.currentUserId = serverUser.id;
-          // await dbHelper.saveUser(name, pinHash, serverUser.id);
-        } catch (error) {
-          console.error("Failed to create user on server:", error);
-        }
-      }
-
-      await this.setupUserSelectOptions();
-      await this.setupProjectSelectOptions();
-      this.updateGreeting();
-      this.showMessage(`${this.t("User created")}: ${name}!`, "success");
-      this.updateSubmitButtonText();
-    } catch (error) {
-      console.error("User creation error:", error);
-      this.showMessage(this.t("Failed to create user"), "error");
-    }
+    this.currentUser = name;
+    this.setupUserSelectOptions(); // Refresh the dropdown
+    this.setupProjectSelectOptions(); // Refresh projects for new user
+    this.showMessage(`User ${name} created`, "success");
   }
 
   async selectExistingUser(fullName) {
-    const pin = prompt(this.t("Enter your PIN:"));
+    const pin = prompt("Enter your 4-digit PIN:");
     if (!pin) {
+      // User cancelled - reset dropdown to previous selection
       this.resetUserDropdownToPrevious();
       return;
     }
 
     const localUser = await dbHelper.getUser(fullName);
     if (!localUser || dbHelper.hashPin(pin) !== localUser.pin_hash) {
-      this.showMessage(this.t("Invalid PIN"), "error");
+      this.showMessage("Invalid PIN", "error");
+      // Reset dropdown to previous selection on invalid PIN
       this.resetUserDropdownToPrevious();
       return;
     }
 
+    // PIN is valid - proceed with user selection
     this.currentUser = fullName;
-    this.currentUserId = localUser.user_uuid || localUser.id;
     this.currentProject = null;
-    this.projects = [];
-    
-    await this.setupProjectSelectOptions();
-    this.showMessage(`${this.t("Welcome back")}, ${fullName}!`, "success");
-    this.updateSubmitButtonText();
+    await this.setupProjectSelectOptions(); // Load projects for selected user
+    this.showMessage(`Switched to ${fullName}`, "success");
   }
 
   resetUserDropdownToPrevious() {
     const userSelect = document.getElementById("user-select");
     if (!userSelect) return;
 
-    userSelect.value = this.currentUser || "";
-    
+    // Reset to the current valid user or default
+    if (this.currentUser) {
+      userSelect.value = this.currentUser;
+    } else {
+      userSelect.value = ""; // Reset to "Select User"
+    }
+
+    // Also clear project selection since user selection failed
     const projectSelect = document.getElementById("project-select");
     if (projectSelect) {
-      projectSelect.innerHTML = `<option value="">${this.t("Select Project")}</option>`;
+      projectSelect.innerHTML = '<option value="">Select Project</option>';
       this.currentProject = null;
     }
   }
@@ -1621,63 +1253,3 @@ class CapseraApp {
 document.addEventListener("DOMContentLoaded", () => {
   window.app = new CapseraApp();
 });
-
-// Add CSS animations
-const style = document.createElement('style');
-style.textContent = `
-  @keyframes slideInRight {
-    from { transform: translateX(100%); opacity: 0; }
-    to { transform: translateX(0); opacity: 1; }
-  }
-  
-  @keyframes slideDown {
-    from { transform: translateY(-100%); opacity: 0; }
-    to { transform: translateY(0); opacity: 1; }
-  }
-  
-  .drafts-scroll-frame {
-    max-height: 300px;
-    overflow-y: auto;
-    border: 1px solid var(--capsera-border, #ddd);
-    border-radius: 4px;
-    padding: 10px;
-    background: #f9f9f9;
-  }
-  
-  .submission-details {
-    max-height: 0;
-    overflow: hidden;
-    transition: max-height 0.3s ease-out;
-  }
-  
-  .submission-details.expanded {
-    max-height: 400px;
-    overflow-y: auto;
-  }
-  
-  .offline-banner {
-    z-index: 1002 !important;
-  }
-  
-  .offline-content {
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    gap: 10px;
-  }
-  
-  .offline-dismiss {
-    background: none;
-    border: none;
-    color: #212529;
-    font-size: 18px;
-    cursor: pointer;
-    padding: 0 5px;
-  }
-  
-  .offline-dismiss:hover {
-    background: rgba(0,0,0,0.1);
-    border-radius: 50%;
-  }
-`;
-document.head.appendChild(style);
